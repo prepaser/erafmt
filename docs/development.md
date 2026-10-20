@@ -15,6 +15,14 @@
 go build -buildvcs=false .
 ```
 
+Build Linux, Windows, and macOS binaries for amd64 and arm64:
+
+```sh
+./build-all.sh
+```
+
+The Bash script uses `VERSION` in each filename and writes the binaries and `SHA256SUMS` to `dist/`. It requires Go and `sha256sum` and can be invoked from any directory.
+
 ## Standard checks
 
 ```sh
