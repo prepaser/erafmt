@@ -13,7 +13,7 @@ A standalone Go formatter for EraBasic `.ERB` and `.ERH` source files.
 
 ## Quick Start
 
-Install Go, then build from the repository root:
+Download prebuilt binaries from [GitHub Releases](https://github.com/prepaser/erafmt/releases), or install Go and build from the repository root:
 
 ```sh
 go build -buildvcs=false -o erafmt .
