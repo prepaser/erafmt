@@ -1,0 +1,134 @@
+package format
+
+import (
+	"bytes"
+	"maps"
+	"strings"
+	"testing"
+)
+
+func TestContinuationProxyKeepsParentNames(t *testing.T) {
+	for _, source := range []string{"#DIM UserNew,1", "$LabelNew", "#PRI"} {
+		p := formatter{
+			kind: ERB, base: 1, state: state{declarations: true},
+			rules: ruleSet{CommaSpacing: true, LabelMarkerSpacing: true},
+			functionContext: functionContext{
+				privateDeclarations: map[string]bool{"UserOld": true},
+				dollarLabels:        map[string]bool{"LabelOld": true},
+			},
+		}
+		if source == "#PRI" {
+			p.functionName = "EVENTTRAIN"
+			p.eventFunctionKnown, p.eventFunctionExact = true, true
+			p.sharpAttributes = sharpAttributeSingle
+		}
+		declarations := maps.Clone(p.privateDeclarations)
+		labels := maps.Clone(p.dollarLabels)
+		attributes := p.sharpAttributes
+		proxy := p.continuationProxy([]byte(source))
+		continuationProxySyntax(proxy)
+		if len(proxy.diagnostics) != 0 || len(proxy.opaque) != 1 || proxy.opaque[0] {
+			t.Fatalf("proxy did not prove %q: %+v", source, proxy.diagnostics)
+		}
+		if !maps.Equal(p.privateDeclarations, declarations) || !maps.Equal(p.dollarLabels, labels) {
+			t.Fatalf("uncommitted proxy changed parent names for %q", source)
+		}
+		if p.sharpAttributes != attributes {
+			t.Fatalf("uncommitted proxy changed parent attributes for %q", source)
+		}
+	}
+}
+
+func TestContinuedLabelState(t *testing.T) {
+	separator := " "
+	options := Options{ContinuationSeparator: &separator}
+	for _, tc := range []struct {
+		src  string
+		line int
+	}{
+		{"@F\n{\n$L\n}\n$L\nRETURN 0\n", 5},
+		{"@F\n$L\n{\n$L\n}\nRETURN 0\n", 4},
+		{"@F\n{\n$L\n}\n{\n$L\n}\nRETURN 0\n", 6},
+		{"@F\n{\n$L\n}\n$M\nRETURN 0\n", 0},
+		{"@F\n{\n$L [[ALIAS]]\n}\n$L\nRETURN 0\n", 0},
+		{"@F\n{\n;#;$L\n}\n$L\nRETURN 0\n", 0},
+		{"@F\n[IF X]\n{\n$L\n}\n[ENDIF]\n$L\nRETURN 0\n", 0},
+		{"@F\n{\n$L +\n}\n$L\nRETURN 0\n", 0},
+	} {
+		r := FormatWithOptions([]byte(tc.src), ERB, options)
+		line := 0
+		for _, d := range r.Diagnostics {
+			if d.Code == "duplicate_label" {
+				line = d.Line
+			}
+		}
+		if line != tc.line {
+			t.Fatalf("source=%q diagnostics=%+v want duplicate at %d", tc.src, r.Diagnostics, tc.line)
+		}
+		again := FormatWithOptions(r.Output, ERB, options)
+		if !bytes.Equal(r.Output, again.Output) || len(again.Changes) != 0 {
+			t.Fatalf("source=%q not idempotent: %+v", tc.src, again)
+		}
+	}
+}
+
+func TestContinuedFullwidthState(t *testing.T) {
+	separator := " "
+	options := Options{AllowFullwidthSpace: true, ContinuationSeparator: &separator}
+	for _, tc := range []struct {
+		head string
+		code string
+	}{
+		{"$L", "duplicate_label"},
+		{"#DIM USR_X", "duplicate_declaration"},
+	} {
+		src := "@F\n{\n　" + tc.head + "\n}\n" + tc.head + "\nRETURN 0\n"
+		r := FormatWithOptions([]byte(src), ERB, options)
+		line := 0
+		for _, d := range r.Diagnostics {
+			if d.Code == tc.code {
+				line = d.Line
+			}
+		}
+		if line != 5 {
+			t.Fatalf("head=%q diagnostics=%+v want duplicate at 5", tc.head, r.Diagnostics)
+		}
+		if again := FormatWithOptions(r.Output, ERB, options); !bytes.Equal(again.Output, r.Output) || len(again.Changes) != 0 {
+			t.Fatalf("head=%q not idempotent: %+v", tc.head, again)
+		}
+	}
+}
+
+func TestContinuedFunctionSeparation(t *testing.T) {
+	separator := " "
+	options := Options{Select: []RuleID{FunctionSeparation}, ContinuationSeparator: &separator}
+	for _, tc := range []struct {
+		src  string
+		want string
+	}{
+		{"@A\nRETURN 0\n{\n@B\n}\nRETURN 0\n", "@A\nRETURN 0\n\n{\n@B\n}\nRETURN 0\n"},
+		{"@A\nRETURN 0\n; docs\n{\n@B\n}\nRETURN 0\n", "@A\nRETURN 0\n\n; docs\n{\n@B\n}\nRETURN 0\n"},
+		{"@A\nRETURN 0\n{\n@B(ARG:0,\nARGS:0)\n}\nRETURN 0\n", "@A\nRETURN 0\n\n{\n@B(ARG:0,\nARGS:0)\n}\nRETURN 0\n"},
+		{"@A\nRETURN 0\n{\n@B\n}\nRETURN 0\n@C\nRETURN 0\n", "@A\nRETURN 0\n\n{\n@B\n}\nRETURN 0\n\n@C\nRETURN 0\n"},
+	} {
+		r := FormatWithOptions([]byte(tc.src), ERB, options)
+		if string(r.Output) != tc.want || len(r.Diagnostics) != 0 {
+			t.Fatalf("source=%q output=%q diagnostics=%+v", tc.src, r.Output, r.Diagnostics)
+		}
+		if again := FormatWithOptions(r.Output, ERB, options); !bytes.Equal(again.Output, r.Output) || len(again.Changes) != 0 {
+			t.Fatalf("not idempotent: %+v", again)
+		}
+	}
+	options.Select = append(options.Select, BinarySpacing)
+	for _, head := range []string{"@B(1)", ";!;@B", "@B[[ALIAS]]", "@B\n@C"} {
+		src := "@A\nRETURN 0\n{\n" + head + "\n}\nRETURN 0\n"
+		if r := FormatWithOptions([]byte(src), ERB, options); strings.Contains(string(r.Output), "RETURN 0\n\n{") {
+			t.Fatalf("untrusted header=%q became a layout boundary: %+v", head, r)
+		}
+	}
+	options.ContinuationSeparator = nil
+	src := []byte("@A\nRETURN 0\n{\n@B\n}\nRETURN 0\n")
+	if r := FormatWithOptions(src, ERB, options); !bytes.Equal(r.Output, src) {
+		t.Fatalf("opaque continuation changed: %+v", r)
+	}
+}
