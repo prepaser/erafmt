@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestConditionalProbesLeaveRawPrintPayloadOpaque(t *testing.T) {
-	payload := string(nestedFormSource(maxFormDepth + 1))
+	payload := string(nestedFormSource(erabasic.MaxFormDepth + 1))
 	for _, prefix := range []string{"", "+= ", "= ", ":0 = "} {
-		for _, input := range []string{
-			"@F\n;#; SIF 1\n;#; PRINT " + prefix + payload + "\nRETURN 1+2\n",
-			"@F\nIF 1\n[IF X]\nELSE\n[ELSE]\n[ENDIF]\nPRINT " + prefix + payload + "\nENDIF\n",
-		} {
+		for _, input := range []string{"@F\n;#; SIF 1\n;#; PRINT " + prefix + payload + "\nRETURN 1+2\n", "@F\nIF 1\n[IF X]\nELSE\n[ELSE]\n[ENDIF]\nPRINT " + prefix + payload + "\nENDIF\n"} {
 			result := FormatWithOptions([]byte(input), ERB, Options{})
 			if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("PRINT "+prefix+payload)) {
 				t.Fatalf("raw payload prefix %q changed result: diagnostics=%+v", prefix, result.Diagnostics)
@@ -22,12 +21,8 @@ func TestConditionalProbesLeaveRawPrintPayloadOpaque(t *testing.T) {
 }
 
 func TestConditionalProbesLeaveRawPrintVPayloadOpaque(t *testing.T) {
-	payload := "'" + string(nestedFormSource(maxFormDepth+1))
-	for _, input := range []string{
-		"@F\nPRINTV " + payload + "\n",
-		"@F\n;#; SIF 1\n;#; PRINTV " + payload + "\nRETURN 1+2\n",
-		"@F\nIF 1\n[IF X]\nELSE\n[ELSE]\n[ENDIF]\nPRINTV " + payload + "\nENDIF\n",
-	} {
+	payload := "'" + string(nestedFormSource(erabasic.MaxFormDepth+1))
+	for _, input := range []string{"@F\nPRINTV " + payload + "\n", "@F\n;#; SIF 1\n;#; PRINTV " + payload + "\nRETURN 1+2\n", "@F\nIF 1\n[IF X]\nELSE\n[ELSE]\n[ENDIF]\nPRINTV " + payload + "\nENDIF\n"} {
 		result := FormatWithOptions([]byte(input), ERB, Options{})
 		if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("PRINTV "+payload)) {
 			t.Fatalf("diagnostics=%+v output changed=%v", result.Diagnostics, !bytes.Contains(result.Output, []byte("PRINTV "+payload)))
@@ -36,7 +31,7 @@ func TestConditionalProbesLeaveRawPrintVPayloadOpaque(t *testing.T) {
 }
 
 func TestConditionalProbesLeaveRawPrintVNPayloadOpaque(t *testing.T) {
-	payload := "'" + string(nestedFormSource(maxFormDepth+1))
+	payload := "'" + string(nestedFormSource(erabasic.MaxFormDepth+1))
 	input := "@F\n;#; SIF 1\n;#; PRINTVN " + payload + "\nRETURN 1+2\n"
 	result := FormatWithOptions([]byte(input), ERB, Options{Dialect: EMEE})
 	if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("PRINTVN "+payload)) {
@@ -45,12 +40,9 @@ func TestConditionalProbesLeaveRawPrintVNPayloadOpaque(t *testing.T) {
 }
 
 func TestConditionalProbesLeaveInactiveDebugFormsOpaque(t *testing.T) {
-	payload := string(nestedFormSource(maxFormDepth + 1))
+	payload := string(nestedFormSource(erabasic.MaxFormDepth + 1))
 	for _, command := range []string{"DEBUGPRINTFORM", "DEBUGPRINTFORML"} {
-		for _, input := range []string{
-			"@F\n;#; SIF 1\n;#; " + command + " " + payload + "\nRETURN 1+2\n",
-			"@F\nIF 1\n[IF X]\nELSE\n[ELSE]\n[ENDIF]\n" + command + " " + payload + "\nENDIF\n",
-		} {
+		for _, input := range []string{"@F\n;#; SIF 1\n;#; " + command + " " + payload + "\nRETURN 1+2\n", "@F\nIF 1\n[IF X]\nELSE\n[ELSE]\n[ENDIF]\n" + command + " " + payload + "\nENDIF\n"} {
 			result := FormatWithOptions([]byte(input), ERB, Options{})
 			if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte(command+" "+payload)) {
 				t.Fatalf("%s probe changed result: diagnostics=%+v", command, result.Diagnostics)
@@ -69,18 +61,18 @@ func TestConditionalConvergenceDeduplicatesCommonStates(t *testing.T) {
 
 func TestConditionalConvergenceWorkLimitUsesProbedRow(t *testing.T) {
 	input := []byte("@F\nRETURN 0\n")
-	p := formatter{src: input, lines: linesOfWithSpace(input, false), convergenceWork: maxConvergenceWork}
-	if p.branchesConverge(0, []state{{}}) {
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: input, Lines: linesOfWithSpace(input, false), ConvergenceWork: erabasic.MaxConvergenceWork}}
+	if p.branchesConverge(0, []erabasic.State{{}}) {
 		t.Fatal("convergence succeeded beyond the work limit")
 	}
-	if !p.aborted || len(p.diagnostics) != 1 {
-		t.Fatalf("aborted=%v diagnostics=%+v", p.aborted, p.diagnostics)
+	if !p.Aborted || len(p.diagnostics) != 1 {
+		t.Fatalf("aborted=%v diagnostics=%+v", p.Aborted, p.diagnostics)
 	}
 	if p.diagnostics[0].Line != 2 || p.diagnostics[0].Code != "resource_limit" {
 		t.Fatalf("diagnostic=%+v, want resource limit on the probed row", p.diagnostics[0])
 	}
-	if !bytes.Equal(p.src, input) {
-		t.Fatalf("resource exhaustion changed source: %q", p.src)
+	if !bytes.Equal(p.Src, input) {
+		t.Fatalf("resource exhaustion changed source: %q", p.Src)
 	}
 }
 
@@ -136,7 +128,25 @@ func TestOptionalSIFPairFallsBackWhenItCannotProveThePair(t *testing.T) {
 }
 
 func TestOptionalSIFPairAcceptsSetRoles(t *testing.T) {
-	cases := []string{"VALUE = 1", "VALUE == 1", "VALUE += 1", "VALUE -= 1", "VALUE *= 1", "VALUE /= 1", "VALUE %= 1", "VALUE &= 1", "VALUE |= 1", "VALUE ^= 1", "VALUE <<= 1", "VALUE >>= 1", "VALUE '= 1", "VALUE++", "VALUE--", "++VALUE", "--VALUE"}
+	cases := []string{
+		"VALUE = 1",
+		"VALUE == 1",
+		"VALUE += 1",
+		"VALUE -= 1",
+		"VALUE *= 1",
+		"VALUE /= 1",
+		"VALUE %= 1",
+		"VALUE &= 1",
+		"VALUE |= 1",
+		"VALUE ^= 1",
+		"VALUE <<= 1",
+		"VALUE >>= 1",
+		"VALUE '= 1",
+		"VALUE++",
+		"VALUE--",
+		"++VALUE",
+		"--VALUE",
+	}
 	for _, target := range cases {
 		t.Run(target, func(t *testing.T) {
 			input := []byte("@F\nIF X\n;#;SIF A\n;#;" + target + "\nRETURN 0\nENDIF\n")
@@ -150,9 +160,7 @@ func TestOptionalSIFPairAcceptsSetRoles(t *testing.T) {
 }
 
 func TestOptionalSIFPairSetRoleGuards(t *testing.T) {
-	for _, target := range []string{
-		"IF += 1", "RETURN += 1", "SIF += 1", "VALUE[[A]] += 1", "VALUE + 1 = 2",
-	} {
+	for _, target := range []string{"IF += 1", "RETURN += 1", "SIF += 1", "VALUE[[A]] += 1", "VALUE + 1 = 2"} {
 		t.Run(target, func(t *testing.T) {
 			input := []byte("@F\nIF X\n;#;SIF A\n;#;" + target + "\nRETURN 0\nENDIF\n")
 			result := FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}})
@@ -161,16 +169,14 @@ func TestOptionalSIFPairSetRoleGuards(t *testing.T) {
 			}
 		})
 	}
-
 	input := []byte("@F\nIF X\n;#;;#;SIF A\n;#;VALUE += 1\nRETURN 0\nENDIF\n")
 	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}})
 	if string(result.Output) != string(input) || len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != "unsupported_structure" {
 		t.Fatalf("stacked marker output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
-
 	input = []byte("@F\nPRINTDATA\n;#;SIF A\n;#;VALUE += 1\nENDDATA\n")
 	result = FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}})
-	if string(result.Output) != string(input) || len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != "invalid_structure" {
+	if string(result.Output) != string(input) || len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != "invalid_structure" || result.Diagnostics[0].Line != 3 || result.Diagnostics[0].Column != 1 {
 		t.Fatalf("data context output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
 }
@@ -223,7 +229,6 @@ func TestPreprocessorBranchesConvergeAcrossCommonPath(t *testing.T) {
 	if !bytes.Equal(again.Output, r.Output) || len(again.Diagnostics) != 0 || len(again.Changes) != 0 {
 		t.Fatalf("not idempotent: %+v", again)
 	}
-
 	input = []byte("@F\n[IF X]\nIF A\nELSE\n[ELSE]\nIF B\n[ENDIF]\n; common\nENDIF\n")
 	want = "@F\n[IF X]\n    IF A\n    ELSE\n[ELSE]\n    IF B\n[ENDIF]\n; common\n    ENDIF\n"
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}})
@@ -240,21 +245,21 @@ func TestPreprocessorBranchesConvergeRejectsUnsafePath(t *testing.T) {
 	cases := []struct {
 		name    string
 		common  string
-		dialect Dialect
+		dialect erabasic.Dialect
 	}{
-		{"pending sif", "SIF B", CommonDialect},
-		{"alias", "[[ALIAS]]", CommonDialect},
-		{"marker", ";#; RETURN 1", CommonDialect},
-		{"directive", "[IF Y]", CommonDialect},
-		{"label", "$LABEL", CommonDialect},
-		{"opener", "IF C", CommonDialect},
-		{"unknown", "FUTURE", CommonDialect},
-		{"dialect unavailable", "FORCE_QUIT", Emuera1824},
+		{"pending sif", "SIF B", erabasic.CommonDialect},
+		{"alias", "[[ALIAS]]", erabasic.CommonDialect},
+		{"marker", ";#; RETURN 1", erabasic.CommonDialect},
+		{"directive", "[IF Y]", erabasic.CommonDialect},
+		{"label", "$LABEL", erabasic.CommonDialect},
+		{"opener", "IF C", erabasic.CommonDialect},
+		{"unknown", "FUTURE", erabasic.CommonDialect},
+		{"dialect unavailable", "FORCE_QUIT", erabasic.Emuera1824},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			input := []byte("@F\n[IF X]\nIF A\nELSE\nRETURN 0\n[ELSE]\nIF B\n[ENDIF]\n" + tc.common + "\nRETURN 1\nENDIF\n")
-			r := FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}, Dialect: tc.dialect})
+			r := FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}, Dialect: Dialect(tc.dialect)})
 			if string(r.Output) != string(input) || len(r.Diagnostics) == 0 || r.Diagnostics[0].Code != "unsupported_structure" {
 				t.Fatalf("output=%q diagnostics=%+v, want preserved unsupported input", r.Output, r.Diagnostics)
 			}
@@ -280,7 +285,6 @@ func TestPreprocessorConditionAcceptsRuntimeIdentifierTokens(t *testing.T) {
 			}
 		})
 	}
-
 	input := []byte("@F\n[IF　CONDITION]\nRETURN 1\n[ENDIF]\n")
 	result := FormatWithOptions(input, ERB, Options{AllowFullwidthSpace: true, Select: []RuleID{InstructionIndent}})
 	if len(result.Diagnostics) != 0 {
@@ -298,13 +302,11 @@ func TestPreprocessorConditionShapePreservesMalformedDirectives(t *testing.T) {
 			}
 		})
 	}
-
 	input := []byte("@F\n[IF X]\nRETURN 1\n[ELSEIF X+1]\nRETURN 2\n[ENDIF]\nRETURN 0\n")
 	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}})
 	if !bytes.Equal(result.Output, input) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" {
 		t.Fatalf("malformed ELSEIF output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
-
 	input = []byte("@F\n[IF　X]\nRETURN 1\n[ENDIF]\n")
 	result = FormatWithOptions(input, ERB, Options{Select: []RuleID{InstructionIndent}})
 	if !bytes.Equal(result.Output, input) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" {
@@ -313,10 +315,7 @@ func TestPreprocessorConditionShapePreservesMalformedDirectives(t *testing.T) {
 }
 
 func TestPreprocessorAliasStopsBeforeFollowingMalformedHeader(t *testing.T) {
-	for _, input := range []string{
-		"@F\n[IF [[ALIAS]]]\n@BAD(\nRETURN 1\n[ENDIF]\n",
-		"@F\n{\n[IF [[ALIAS]]]\n}\n@BAD(\nRETURN 1\n[ENDIF]\n",
-	} {
+	for _, input := range []string{"@F\n[IF [[ALIAS]]]\n@BAD(\nRETURN 1\n[ENDIF]\n", "@F\n{\n[IF [[ALIAS]]]\n}\n@BAD(\nRETURN 1\n[ENDIF]\n"} {
 		result := FormatWithOptions([]byte(input), ERB, Options{})
 		if !bytes.Equal(result.Output, []byte(input)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Message != "preprocessor structure depends on aliases" {
 			t.Fatalf("output=%q diagnostics=%+v", result.Output, result.Diagnostics)

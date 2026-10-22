@@ -3,14 +3,12 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func commandOptions() Options {
-	return Options{Select: []RuleID{
-		FunctionIndent, InstructionIndent,
-		CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing,
-		IndexSpacing, FormPadding, AssignmentLeftSpacing, AssignmentRightSpacing,
-	}}
+	return Options{Select: []RuleID{FunctionIndent, InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, IndexSpacing, FormPadding, AssignmentLeftSpacing, AssignmentRightSpacing}}
 }
 
 func TestRegisteredCommandsFormatBoundedArguments(t *testing.T) {
@@ -127,8 +125,8 @@ func TestRegisteredInputFormRollback(t *testing.T) {
 
 func TestRegisteredInputFormKeepsWhitespaceLiteral(t *testing.T) {
 	input := []byte("@F\nINPUTS   \nONEINPUTS; \t\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
-		r := FormatWithOptions(input, ERB, Options{Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
+		r := FormatWithOptions(input, ERB, Options{Dialect: Dialect(dialect)})
 		want := []byte("@F\n    INPUTS   \n    ONEINPUTS; \t\n")
 		if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%v output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
@@ -137,12 +135,7 @@ func TestRegisteredInputFormKeepsWhitespaceLiteral(t *testing.T) {
 }
 
 func TestRegisteredProvidedFieldsMustBeNonempty(t *testing.T) {
-	for _, body := range []string{
-		"SETCOLOR 1+2,,3",
-		"ARRAYSHIFT ARR,1+2,B,,5",
-		"ADDCHARA 1+2,,",
-		"DRAWLINEFORM",
-	} {
+	for _, body := range []string{"SETCOLOR 1+2,,3", "ARRAYSHIFT ARR,1+2,B,,5", "ADDCHARA 1+2,,", "DRAWLINEFORM"} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{BinarySpacing, CommaSpacing, FormPadding}})
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || len(r.Changes) != 0 {
@@ -152,44 +145,13 @@ func TestRegisteredProvidedFieldsMustBeNonempty(t *testing.T) {
 }
 
 func TestRegisteredCommandTerminalCommas(t *testing.T) {
-	input := []byte("@F\n" +
-		"TINPUT 15,-1,0,\n" +
-		"PRINTBUTTON \"x\",1,\n" +
-		"SAVEDATA 1,\"x\",\n" +
-		"BAR 1,2,3,\n" +
-		"ADDCHARA 1+2,\n" +
-		"SETCOLOR 1,\n" +
-		"PRINTBUTTON \"x\",1,,\n" +
-		"SAVEDATA 1,\"x\",,\n" +
-		"BAR 1,2,3,,\n" +
-		"TINPUT 15,-1,0,,\n" +
-		"ADDCHARA 1+2,,\n" +
-		"SETCOLOR 1,,3\n")
+	input := []byte("@F\n" + "TINPUT 15,-1,0,\n" + "PRINTBUTTON \"x\",1,\n" + "SAVEDATA 1,\"x\",\n" + "BAR 1,2,3,\n" + "ADDCHARA 1+2,\n" + "SETCOLOR 1,\n" + "PRINTBUTTON \"x\",1,,\n" + "SAVEDATA 1,\"x\",,\n" + "BAR 1,2,3,,\n" + "TINPUT 15,-1,0,,\n" + "ADDCHARA 1+2,,\n" + "SETCOLOR 1,,3\n")
 	r := FormatWithOptions(input, ERB, commandOptions())
-	want := []byte("@F\n" +
-		"    TINPUT 15, -1, 0,\n" +
-		"    PRINTBUTTON \"x\", 1,\n" +
-		"    SAVEDATA 1, \"x\",\n" +
-		"    BAR 1, 2, 3,\n" +
-		"    ADDCHARA 1 + 2,\n" +
-		"    SETCOLOR 1,\n" +
-		"    PRINTBUTTON \"x\",1,,\n" +
-		"    SAVEDATA 1,\"x\",,\n" +
-		"    BAR 1,2,3,,\n" +
-		"    TINPUT 15,-1,0,,\n" +
-		"    ADDCHARA 1+2,,\n" +
-		"    SETCOLOR 1,,3\n")
+	want := []byte("@F\n" + "    TINPUT 15, -1, 0,\n" + "    PRINTBUTTON \"x\", 1,\n" + "    SAVEDATA 1, \"x\",\n" + "    BAR 1, 2, 3,\n" + "    ADDCHARA 1 + 2,\n" + "    SETCOLOR 1,\n" + "    PRINTBUTTON \"x\",1,,\n" + "    SAVEDATA 1,\"x\",,\n" + "    BAR 1,2,3,,\n" + "    TINPUT 15,-1,0,,\n" + "    ADDCHARA 1+2,,\n" + "    SETCOLOR 1,,3\n")
 	if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 6 {
 		t.Fatalf("output=%q diagnostics=%+v want=%q", r.Output, r.Diagnostics, want)
 	}
-	for _, line := range []string{
-		"    TINPUT 15, -1, 0,",
-		"    PRINTBUTTON \"x\", 1,",
-		"    SAVEDATA 1, \"x\",",
-		"    BAR 1, 2, 3,",
-		"    ADDCHARA 1 + 2,",
-		"    SETCOLOR 1,",
-	} {
+	for _, line := range []string{"    TINPUT 15, -1, 0,", "    PRINTBUTTON \"x\", 1,", "    SAVEDATA 1, \"x\",", "    BAR 1, 2, 3,", "    ADDCHARA 1 + 2,", "    SETCOLOR 1,"} {
 		if !bytes.Contains(r.Output, []byte(line+"\n")) {
 			t.Fatalf("missing formatted terminal comma line %q in %q", line, r.Output)
 		}
@@ -215,10 +177,7 @@ func TestSAVEVARFormatsStringAndVariableFields(t *testing.T) {
 
 func TestSAVEVARRequiresVariableTail(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
-	for _, body := range []string{
-		"SAVEVAR \"file\",\"message\"",
-		"SAVEVAR \"file\",\"message\",RESULT,,RESULTS",
-	} {
+	for _, body := range []string{"SAVEVAR \"file\",\"message\"", "SAVEVAR \"file\",\"message\",RESULT,,RESULTS"} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || len(r.Changes) != 0 {
@@ -319,10 +278,7 @@ func TestRegisteredFormAnyCommandsPreserveLiteralPayload(t *testing.T) {
 }
 
 func TestUnrecognizedUnicodeStatementPreservesIndent(t *testing.T) {
-	for _, src := range []string{
-		"@F\n\t\tαβ text = GETVAR(\"x\") + 1  \nRETURN 0\n",
-		"@F\nSIF 1\n\t\tαβ text = 1  \nRETURN 0\n",
-	} {
+	for _, src := range []string{"@F\n\t\tαβ text = GETVAR(\"x\") + 1  \nRETURN 0\n", "@F\nSIF 1\n\t\tαβ text = 1  \nRETURN 0\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if !bytes.Contains(result.Output, []byte("\t\tαβ text = ")) || !bytes.Contains(result.Output, []byte("  \n")) {
 			t.Fatalf("unrecognized line changed: %q", result.Output)

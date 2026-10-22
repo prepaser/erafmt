@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -17,7 +18,6 @@ func continuationProofDiagnostic(result Result, code string) (Diagnostic, bool) 
 func TestContinuationProofMapsStructureWarnings(t *testing.T) {
 	separator := " "
 	options := Options{ContinuationSeparator: &separator}
-
 	t.Run("nested repeat and count", func(t *testing.T) {
 		src := []byte("@F\nREPEAT 1\n{\nREPEAT 0\n}\nREND\nREND\n")
 		result := FormatWithOptions(src, ERB, options)
@@ -31,7 +31,6 @@ func TestContinuationProofMapsStructureWarnings(t *testing.T) {
 			t.Fatalf("count diagnostic=%+v", count)
 		}
 	})
-
 	t.Run("final branch keeps physical column", func(t *testing.T) {
 		src := []byte("@F\nIF 1\nELSE\n{\n  ELSEIF 2\n}\nENDIF\n")
 		result := FormatWithOptions(src, ERB, options)
@@ -45,35 +44,17 @@ func TestContinuationProofMapsStructureWarnings(t *testing.T) {
 func TestContinuationProofMergesDataMetadataConservatively(t *testing.T) {
 	separator := " "
 	options := Options{ContinuationSeparator: &separator}
-
 	tests := []struct {
 		name string
 		src  string
 		want bool
 		line int
 	}{
-		{
-			name: "agreeing branches",
-			src:  "@F\n[IF X]\n{\nPRINTDATA\n}\n[ELSE]\n{\nPRINTDATA\n}\n[ENDIF]\nENDDATA\n",
-			want: true,
-			line: 11,
-		},
-		{
-			name: "alias branch",
-			src:  "@F\n[IF X]\n{\nPRINTDATA\n}\n[ELSE]\n{\nPRINTDATA [[ALIAS]]\n}\n[ENDIF]\nENDDATA\n",
-		},
-		{
-			name: "different branch frames",
-			src:  "@F\n[IF X]\n{\nPRINTDATA\n}\n[ELSE]\n{\nREPEAT 1\n}\n[ENDIF]\nENDDATA\n",
-		},
-		{
-			name: "empty data list",
-			src:  "@F\nPRINTDATA\n{\nDATALIST\n}\nENDLIST\nENDDATA\n",
-			want: true,
-			line: 6,
-		},
+		{name: "agreeing branches", src: "@F\n[IF X]\n{\nPRINTDATA\n}\n[ELSE]\n{\nPRINTDATA\n}\n[ENDIF]\nENDDATA\n", want: true, line: 11},
+		{name: "alias branch", src: "@F\n[IF X]\n{\nPRINTDATA\n}\n[ELSE]\n{\nPRINTDATA [[ALIAS]]\n}\n[ENDIF]\nENDDATA\n"},
+		{name: "different branch frames", src: "@F\n[IF X]\n{\nPRINTDATA\n}\n[ELSE]\n{\nREPEAT 1\n}\n[ENDIF]\nENDDATA\n"},
+		{name: "empty data list", src: "@F\nPRINTDATA\n{\nDATALIST\n}\nENDLIST\nENDDATA\n", want: true, line: 6},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			result := FormatWithOptions([]byte(test.src), ERB, options)
@@ -96,22 +77,10 @@ func TestContinuationProofDefersUncertainRows(t *testing.T) {
 		src     string
 		options Options
 	}{
-		{
-			name:    "alias",
-			src:     "@F\nREPEAT 1\n{\nREPEAT 2 [[ALIAS]]\n}\nREND\nREND\n",
-			options: Options{ContinuationSeparator: &separator},
-		},
-		{
-			name:    "leading marker",
-			src:     "@F\nREPEAT 1\n{\n;!;REPEAT 2\n}\nREND\nREND\n",
-			options: Options{ContinuationSeparator: &separator},
-		},
-		{
-			name: "missing separator",
-			src:  "@F\nREPEAT 1\n{\nREPEAT 2\n}\nREND\nREND\n",
-		},
+		{name: "alias", src: "@F\nREPEAT 1\n{\nREPEAT 2 [[ALIAS]]\n}\nREND\nREND\n", options: Options{ContinuationSeparator: &separator}},
+		{name: "leading marker", src: "@F\nREPEAT 1\n{\n;!;REPEAT 2\n}\nREND\nREND\n", options: Options{ContinuationSeparator: &separator}},
+		{name: "missing separator", src: "@F\nREPEAT 1\n{\nREPEAT 2\n}\nREND\nREND\n"},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			result := FormatWithOptions([]byte(test.src), ERB, test.options)
@@ -127,7 +96,6 @@ func TestContinuationProofDefersUncertainRows(t *testing.T) {
 func TestContinuationProofRespectsSelectionAndIdempotence(t *testing.T) {
 	separator := " "
 	src := []byte("@F\nREPEAT 1\n{\nREPEAT 2\n}\nREND\nREND\n")
-
 	quiet := FormatWithOptions(src, ERB, Options{Select: []RuleID{}, ContinuationSeparator: &separator})
 	if !bytes.Equal(quiet.Output, src) || len(quiet.Changes) != 0 {
 		t.Fatalf("zero-rule output=%q changes=%+v", quiet.Output, quiet.Changes)
@@ -135,7 +103,6 @@ func TestContinuationProofRespectsSelectionAndIdempotence(t *testing.T) {
 	if _, ok := continuationProofDiagnostic(quiet, "nested_repeat"); !ok {
 		t.Fatalf("zero-rule diagnostics=%+v", quiet.Diagnostics)
 	}
-
 	indented := FormatWithOptions(src, ERB, Options{Select: []RuleID{InstructionIndent}, ContinuationSeparator: &separator})
 	want := []byte("@F\n    REPEAT 1\n{\nREPEAT 2\n}\n        REND\n    REND\n")
 	if !bytes.Equal(indented.Output, want) || len(indented.Changes) == 0 {

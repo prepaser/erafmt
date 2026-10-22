@@ -2,23 +2,17 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestNilContinuationDefersAmbiguousCommandIdentity(t *testing.T) {
-	for _, src := range []string{
-		"@F\n#DIM IFOO\n{\nIF\nOO = 1\n}\nRETURN 0\n",
-		"@F\n#DIM IFX\n{\nIF\n;comment\n}\nRETURN 0\n",
-		"@F\n#DIM DOX\n{\nDO\n}\nRETURN 0\n",
-		"@F\n{\nRE\nPEAT 1\n}\nREND\n",
-		"@F\n{\nEND\nIF\n}\nRETURN 0\n",
-	} {
+	for _, src := range []string{"@F\n#DIM IFOO\n{\nIF\nOO = 1\n}\nRETURN 0\n", "@F\n#DIM IFX\n{\nIF\n;comment\n}\nRETURN 0\n", "@F\n#DIM DOX\n{\nDO\n}\nRETURN 0\n", "@F\n{\nRE\nPEAT 1\n}\nREND\n", "@F\n{\nEND\nIF\n}\nRETURN 0\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
 		}
 	}
-
 	separator := ""
 	result := FormatWithOptions([]byte("@F\n#DIM IFOO\n{\nIF\nOO = 1\n}\nRETURN 0\n"), ERB, Options{ContinuationSeparator: &separator})
 	if len(result.Diagnostics) != 0 {
@@ -32,19 +26,16 @@ func TestNilContinuationDefersLeadingBlankDispatch(t *testing.T) {
 	if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
 		t.Fatalf("output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
-
 	separator := ";comment"
 	result = FormatWithOptions([]byte(src), ERB, Options{ContinuationSeparator: &separator})
 	if len(result.Diagnostics) != 0 {
 		t.Fatalf("explicit separator diagnostics=%+v", result.Diagnostics)
 	}
-
 	src = "@F\n{\n\nRETURN 0\n}\n@G\nENDIF\n"
 	result = FormatWithOptions([]byte(src), ERB, Options{})
 	if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
 		t.Fatalf("later boundary output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
-
 	src = "@F\nIF 1\n{\n\n}\n@G\nRETURN 0\n"
 	result = FormatWithOptions([]byte(src), ERB, Options{})
 	if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
@@ -58,11 +49,7 @@ func TestNilContinuationDefersLeadingBlankDispatch(t *testing.T) {
 }
 
 func TestNilContinuationDefersAmbiguousFunctionHeader(t *testing.T) {
-	for _, src := range []string{
-		"@A\n{\n@FO\nO\n}\nRETURN 0\n",
-		"@A\n{\n@F(ARG=1p\n63)\n}\nRETURN 0\n",
-		"@A\nRETURN 0\n{\n@EVENTFIRST\n}\n#FUNCTION\nRETURNF 1+2\n",
-	} {
+	for _, src := range []string{"@A\n{\n@FO\nO\n}\nRETURN 0\n", "@A\n{\n@F(ARG=1p\n63)\n}\nRETURN 0\n", "@A\nRETURN 0\n{\n@EVENTFIRST\n}\n#FUNCTION\nRETURNF 1+2\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
@@ -71,13 +58,7 @@ func TestNilContinuationDefersAmbiguousFunctionHeader(t *testing.T) {
 }
 
 func TestNilContinuationAcceptsSealedParenthesizedHeader(t *testing.T) {
-	for _, head := range []string{
-		"@B(ARG:0=1);comment",
-		"@B((ARG:0=1));comment",
-		"@B(ARG:0=F(1));comment",
-		"@B(ARG:0=1);!; ;comment",
-		"@B(ARG:0=1);#; ;comment",
-	} {
+	for _, head := range []string{"@B(ARG:0=1);comment", "@B((ARG:0=1));comment", "@B(ARG:0=F(1));comment", "@B(ARG:0=1);!; ;comment", "@B(ARG:0=1);#; ;comment"} {
 		src := []byte("@A\n{\n" + head + "\n}\nRETURN 0\n")
 		result := FormatWithOptions(src, ERB, Options{})
 		if len(result.Diagnostics) != 0 {
@@ -89,7 +70,6 @@ func TestNilContinuationAcceptsSealedParenthesizedHeader(t *testing.T) {
 			t.Fatalf("head=%q explicit suffix diagnostics=%+v", head, result.Diagnostics)
 		}
 	}
-
 	for _, head := range []string{"@B(ARG:0=1)", "@B(ARG:0=1);!;"} {
 		src := []byte("@A\n{\n" + head + "\n}\nRETURN 0\n")
 		result := FormatWithOptions(src, ERB, Options{})
@@ -100,12 +80,7 @@ func TestNilContinuationAcceptsSealedParenthesizedHeader(t *testing.T) {
 }
 
 func TestNilContinuationValidatesSealedHeaderArguments(t *testing.T) {
-	for _, head := range []string{
-		"@B(F(1));comment",
-		"@B(1);comment",
-		"@B(\"x\");comment",
-		"@B(ITEMPRICE:0);comment",
-	} {
+	for _, head := range []string{"@B(F(1));comment", "@B(1);comment", "@B(\"x\");comment", "@B(ITEMPRICE:0);comment"} {
 		src := []byte("@A\n{\n" + head + "\n}\nRETURN 0\n")
 		result := FormatWithOptions(src, ERB, Options{})
 		if len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_syntax" || result.Diagnostics[0].Severity != Unsupported {
@@ -120,7 +95,6 @@ func TestNilContinuationValidatesSealedHeaderArguments(t *testing.T) {
 			t.Fatalf("head=%q nil output=%q explicit=%q", head, result.Output, explicit.Output)
 		}
 	}
-
 	indented := []byte("@A\n{\n  @B(F(1));comment\n}\nRETURN 0\n")
 	result := FormatWithOptions(indented, ERB, Options{})
 	separator := " "
@@ -149,7 +123,6 @@ func TestNilContinuationValidatesSealedHeaderArguments(t *testing.T) {
 			t.Fatalf("%s mapped diagnostics nil=%+v explicit=%+v", test.name, result.Diagnostics, explicitResult.Diagnostics)
 		}
 	}
-
 	for _, marker := range []string{";!;", ";#;"} {
 		src := []byte("@A\n{\n" + marker + "@B(1);comment\n}\nRETURN 0\n")
 		result := FormatWithOptions(src, ERB, Options{})
@@ -157,7 +130,6 @@ func TestNilContinuationValidatesSealedHeaderArguments(t *testing.T) {
 			t.Fatalf("marker=%q output=%q diagnostics=%+v", marker, result.Output, result.Diagnostics)
 		}
 	}
-
 	for _, head := range []string{"@B(ARG:0=F(1));comment", "@B((ARG:0));comment", "@B(ARG:0+1);comment"} {
 		src := []byte("@A\n{\n" + head + "\n}\nRETURN 0\n")
 		result := FormatWithOptions(src, ERB, Options{})
@@ -188,7 +160,6 @@ func TestNilContinuationDefersHeaderDefaultAndEventContext(t *testing.T) {
 	if len(result.Diagnostics) != 0 {
 		t.Fatalf("comma explicit separator diagnostics=%+v", result.Diagnostics)
 	}
-
 	eventSource := "@A\nRETURN 0\n{\n@EVENTFIRST\n}\n#FUNCTION\nRETURNF 1+2\n"
 	result = FormatWithOptions([]byte(eventSource), ERB, Options{})
 	if !bytes.Equal(result.Output, []byte(eventSource)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
@@ -202,12 +173,7 @@ func TestNilContinuationDefersHeaderDefaultAndEventContext(t *testing.T) {
 }
 
 func TestNilContinuationKeepsKnownHeaderErrors(t *testing.T) {
-	for _, src := range []string{
-		"@A\n{\n@F(ARG=)\n}\nRETURN 0\n",
-		"@A\n{\n@123\n}\nRETURN 0\n",
-		"@A\n{\n@F(ARG=1]\n}\nRETURN 0\n",
-		"@A\n{\n@F,]\n}\nRETURN 0\n",
-	} {
+	for _, src := range []string{"@A\n{\n@F(ARG=)\n}\nRETURN 0\n", "@A\n{\n@123\n}\nRETURN 0\n", "@A\n{\n@F(ARG=1]\n}\nRETURN 0\n", "@A\n{\n@F,]\n}\nRETURN 0\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "invalid_header" || result.Diagnostics[0].Severity != Error {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
@@ -232,16 +198,12 @@ func TestNilContinuationDefersMarkerSplitBeforeCommentDispatch(t *testing.T) {
 }
 
 func TestNilContinuationDefersIncompleteMarkerPrefix(t *testing.T) {
-	for _, src := range []string{
-		"@F\n{\n;\n}\nENDIF\nRETURN 0\n",
-		"@F\n{\n;!\n}\nENDIF\nRETURN 0\n",
-	} {
+	for _, src := range []string{"@F\n{\n;\n}\nENDIF\nRETURN 0\n", "@F\n{\n;!\n}\nENDIF\nRETURN 0\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if !bytes.Equal(result.Output, []byte(src)) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_structure" || result.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
 		}
 	}
-
 	separator := "!;IF 1"
 	result := FormatWithOptions([]byte("@F\n{\n;\n}\nENDIF\nRETURN 0\n"), ERB, Options{ContinuationSeparator: &separator})
 	if len(result.Diagnostics) != 0 {
@@ -255,10 +217,7 @@ func TestNilContinuationDefersIncompleteMarkerPrefix(t *testing.T) {
 }
 
 func TestNilContinuationTracksPhysicallyDelimitedStructure(t *testing.T) {
-	for _, src := range []string{
-		"@F\n{\nIF A\n}\nENDIF\n",
-		"@F\n{\n[SKIPSTART]\n}\n[SKIPEND]\n",
-	} {
+	for _, src := range []string{"@F\n{\nIF A\n}\nENDIF\n", "@F\n{\n[SKIPSTART]\n}\n[SKIPEND]\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if len(result.Diagnostics) != 0 {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)

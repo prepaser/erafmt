@@ -161,12 +161,6 @@ func TestConditionalFunctionBoundaryPreservesFile(t *testing.T) {
 	}
 }
 
-func TestSifPartialMetadata(t *testing.T) {
-	if !partial("CASE") || !partial("CASEELSE") || !partial("ENDDATA") || partial("BREAK") {
-		t.Fatal("PARTIAL classification differs from instruction flags")
-	}
-}
-
 func FuzzFormat(f *testing.F) {
 	f.Add([]byte("\n\ufeff"), byte(0))
 	for _, seed := range []string{"", "@F\nIF A>0\nRETURN 1\nENDIF\n", "[IF USR_X]\nSIF A\n[ENDIF]\n", "@F\n{\nPRINTFORM x\n}\n", "　IF USR_X\n", "@F\n;#; IF USR_X\n"} {

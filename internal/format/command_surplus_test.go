@@ -2,20 +2,12 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestSpecializedCommandSurplusIsPreservedAsWarning(t *testing.T) {
-	src := []byte("@F\n" +
-		"ARRAYSORT RESULTS,FORWARD,1,2,3\n" +
-		"SORTCHARA CSTR,FORWARD,1\n" +
-		"SAVECHARA \"file\",\"message\",1,\n" +
-		"HTML_TAGSPLIT \"a\",RESULTS,RESULT,1\n" +
-		"TIMES RESULT,1,2\n" +
-		"SWAP RESULT,RESULT,1\n" +
-		"SPLIT \"a\",\",\",RESULTS,RESULT,1\n" +
-		"PRINTDATA RESULT,\nDATA raw\nENDDATA\n" +
-		"STRDATA RESULTS,\nDATA raw\nENDDATA\n")
+	src := []byte("@F\n" + "ARRAYSORT RESULTS,FORWARD,1,2,3\n" + "SORTCHARA CSTR,FORWARD,1\n" + "SAVECHARA \"file\",\"message\",1,\n" + "HTML_TAGSPLIT \"a\",RESULTS,RESULT,1\n" + "TIMES RESULT,1,2\n" + "SWAP RESULT,RESULT,1\n" + "SPLIT \"a\",\",\",RESULTS,RESULT,1\n" + "PRINTDATA RESULT,\nDATA raw\nENDDATA\n" + "STRDATA RESULTS,\nDATA raw\nENDDATA\n")
 	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{FunctionIndent, InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing}})
 	for _, body := range []string{
 		"ARRAYSORT RESULTS,FORWARD,1,2,3",
@@ -49,29 +41,12 @@ func TestSpecializedCommandSurplusIsPreservedAsWarning(t *testing.T) {
 }
 
 func TestSpecializedCommandsAcceptOneTrailingComma(t *testing.T) {
-	src := []byte("@F\n" +
-		"TIMES RESULT,1,\n" +
-		"SWAP RESULT,RESULT,\n" +
-		"SPLIT \"a\",\",\",RESULTS,\n" +
-		"ARRAYSORT RESULTS,\n" +
-		"SORTCHARA CSTR,\n" +
-		"HTML_TAGSPLIT \"a\",RESULTS,\n" +
-		"PRINTDATA RESULT,\nDATA raw\nENDDATA\n" +
-		"STRDATA RESULTS,\nDATA raw\nENDDATA\n")
+	src := []byte("@F\n" + "TIMES RESULT,1,\n" + "SWAP RESULT,RESULT,\n" + "SPLIT \"a\",\",\",RESULTS,\n" + "ARRAYSORT RESULTS,\n" + "SORTCHARA CSTR,\n" + "HTML_TAGSPLIT \"a\",RESULTS,\n" + "PRINTDATA RESULT,\nDATA raw\nENDDATA\n" + "STRDATA RESULTS,\nDATA raw\nENDDATA\n")
 	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{FunctionIndent, InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing}})
 	if len(r.Diagnostics) != 0 {
 		t.Fatalf("diagnostics=%+v output=%q", r.Diagnostics, r.Output)
 	}
-	for _, body := range []string{
-		"TIMES RESULT, 1,",
-		"SWAP RESULT, RESULT,",
-		"SPLIT \"a\", \",\", RESULTS,",
-		"ARRAYSORT RESULTS,",
-		"SORTCHARA CSTR,",
-		"HTML_TAGSPLIT \"a\", RESULTS,",
-		"PRINTDATA RESULT,",
-		"STRDATA RESULTS,",
-	} {
+	for _, body := range []string{"TIMES RESULT, 1,", "SWAP RESULT, RESULT,", "SPLIT \"a\", \",\", RESULTS,", "ARRAYSORT RESULTS,", "SORTCHARA CSTR,", "HTML_TAGSPLIT \"a\", RESULTS,", "PRINTDATA RESULT,", "STRDATA RESULTS,"} {
 		if !bytes.Contains(r.Output, []byte(body)) {
 			t.Fatalf("body %q missing: output=%q", body, r.Output)
 		}

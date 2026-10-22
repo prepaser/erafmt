@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -97,11 +98,7 @@ func TestCommandCountsPreserveObjectMacros(t *testing.T) {
 }
 
 func TestColorFieldsPreserveUnpairedTernaryHash(t *testing.T) {
-	options := Options{
-		Dialect:             EMEE,
-		AllowFullwidthSpace: true,
-		Select:              []RuleID{CommandSpacing, BinarySpacing, TernarySpacing, CommaSpacing},
-	}
+	options := Options{Dialect: EMEE, AllowFullwidthSpace: true, Select: []RuleID{CommandSpacing, BinarySpacing, TernarySpacing, CommaSpacing}}
 	for _, test := range []struct {
 		line string
 		want string
@@ -122,12 +119,7 @@ func TestColorFieldsPreserveUnpairedTernaryHash(t *testing.T) {
 	}
 	separator := ""
 	src := []byte("@F\n{\nSETCOLOR #FF00FF\n}\nRETURN 0\n")
-	r := FormatWithOptions(src, ERB, Options{
-		Dialect:               EMEE,
-		AllowFullwidthSpace:   true,
-		ContinuationSeparator: &separator,
-		Select:                []RuleID{CommandSpacing, BinarySpacing, TernarySpacing, CommaSpacing},
-	})
+	r := FormatWithOptions(src, ERB, Options{Dialect: EMEE, AllowFullwidthSpace: true, ContinuationSeparator: &separator, Select: []RuleID{CommandSpacing, BinarySpacing, TernarySpacing, CommaSpacing}})
 	if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 0 {
 		t.Fatalf("continuation output=%q diagnostics=%+v want=%q", r.Output, r.Diagnostics, src)
 	}

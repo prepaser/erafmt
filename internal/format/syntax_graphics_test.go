@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestGraphicsBaseForms(t *testing.T) {
 	src := []byte("@F\nPRINT_IMG  \"name\"\nPRINT_IMG IMAGE:0+\"x\"\nPRINT_RECT 1+2,2, 3,4\nPRINT_SPACE ( 1+2 )\n")
-	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{
-		InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing,
-	}})
+	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing}})
 	want := "@F\n    PRINT_IMG \"name\"\n    PRINT_IMG IMAGE:0 + \"x\"\n    PRINT_RECT 1 + 2, 2, 3, 4\n    PRINT_SPACE (1 + 2)\n"
 	if string(r.Output) != want || len(r.Diagnostics) != 0 {
 		t.Fatalf("output=%q diagnostics=%+v", r.Output, r.Diagnostics)
@@ -65,8 +65,8 @@ func TestGraphicsRejectsKnownAdjacentOperands(t *testing.T) {
 
 func TestGraphicsRejectsAdjacentAfterClosedBuiltin(t *testing.T) {
 	source := []byte("PRINT_SPACE ABS(1)2\nPRINT_SPACE UNKNOWN(1)2\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
-		r := FormatWithOptions(source, ERB, Options{Select: []RuleID{BinarySpacing}, Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
+		r := FormatWithOptions(source, ERB, Options{Select: []RuleID{BinarySpacing}, Dialect: Dialect(dialect)})
 		if !bytes.Equal(r.Output, source) || len(r.Diagnostics) != 1 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
 		}
@@ -78,16 +78,15 @@ func TestGraphicsRejectsAdjacentAfterClosedBuiltin(t *testing.T) {
 
 func TestGraphicsRejectsProvenClosedOperatorsAndQualifiers(t *testing.T) {
 	source := []byte("PRINT_SPACE RESULT@FUNC\nPRINT_SPACE ABS(1)++\nPRINT_RECT ABS(1)+*1,2,3,4\nPRINT_RECT ABS(1)+?2#3,2,3,4\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
-		r := FormatWithOptions(source, ERB, Options{Select: []RuleID{BinarySpacing}, Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
+		r := FormatWithOptions(source, ERB, Options{Select: []RuleID{BinarySpacing}, Dialect: Dialect(dialect)})
 		if !bytes.Equal(r.Output, source) || len(r.Diagnostics) != 4 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
 		}
 	}
-
 	valid := []byte("PRINT_SPACE ABS(1)+-2\nPRINT_SPACE ABS(1)?2#3\nPRINT_SPACE (RESULT)++\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
-		r := FormatWithOptions(valid, ERB, Options{Select: []RuleID{}, Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
+		r := FormatWithOptions(valid, ERB, Options{Select: []RuleID{}, Dialect: Dialect(dialect)})
 		if !bytes.Equal(r.Output, valid) || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
 		}
@@ -101,9 +100,8 @@ func TestGraphicsCallArgumentsMayContainStrings(t *testing.T) {
 	if string(r.Output) != want || len(r.Diagnostics) != 0 {
 		t.Fatalf("output=%q diagnostics=%+v", r.Output, r.Diagnostics)
 	}
-
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824} {
-		r := FormatWithOptions([]byte("PRINT_SPACE STRLENS(\"abc\")\n"), ERB, Options{Select: []RuleID{CommandSpacing}, Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824} {
+		r := FormatWithOptions([]byte("PRINT_SPACE STRLENS(\"abc\")\n"), ERB, Options{Select: []RuleID{CommandSpacing}, Dialect: Dialect(dialect)})
 		if string(r.Output) != "PRINT_SPACE STRLENS(\"abc\")\n" || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
 		}
@@ -121,11 +119,7 @@ func TestGraphicsImageCallArgumentsDeferReturnType(t *testing.T) {
 
 func TestGraphicsPixelUnitPreservesAdjacentMarkerGap(t *testing.T) {
 	for _, gap := range []string{"", " ", "    ", "\t", " \t "} {
-		for _, source := range []string{
-			"PRINT_SPACE 1;!;" + gap + "px\n",
-			"PRINT_RECT 1;!;" + gap + "px,2\tpx,3 px,4 px\n",
-			"PRINT_IMG \"x\",1;!;" + gap + "px\n",
-		} {
+		for _, source := range []string{"PRINT_SPACE 1;!;" + gap + "px\n", "PRINT_RECT 1;!;" + gap + "px,2\tpx,3 px,4 px\n", "PRINT_IMG \"x\",1;!;" + gap + "px\n"} {
 			r := FormatWithOptions([]byte(source), ERB, Options{Dialect: EMEE, Select: []RuleID{PixelUnitSpacing}})
 			want := strings.ReplaceAll(source, "2\tpx", "2 px")
 			if len(r.Diagnostics) != 0 || string(r.Output) != want {
@@ -144,8 +138,8 @@ func TestGraphicsPixelUnitPreservesAdjacentMarkerGap(t *testing.T) {
 
 func TestGraphicsTopLevelStringsRemainInvalid(t *testing.T) {
 	src := []byte("PRINT_SPACE \"abc\"\nPRINT_SPACE (\"abc\")\nPRINT_SPACE F((\"abc\"))\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824} {
-		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{PixelUnitSpacing}, Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824} {
+		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{PixelUnitSpacing}, Dialect: Dialect(dialect)})
 		if string(r.Output) != string(src) || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
 		}
@@ -158,8 +152,8 @@ func TestGraphicsTopLevelStringsRemainInvalid(t *testing.T) {
 
 func TestGraphicsDialectAndUnitBoundaries(t *testing.T) {
 	src := []byte("@F\nPRINT_RECT  10\tpx\nPRINT_RECT  10px\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824} {
-		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{PixelUnitSpacing, CommandSpacing}, Dialect: dialect})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824} {
+		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{PixelUnitSpacing, CommandSpacing}, Dialect: Dialect(dialect)})
 		want := "@F\nPRINT_RECT 10\tpx\nPRINT_RECT 10px\n"
 		if string(r.Output) != want || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
@@ -194,13 +188,10 @@ func TestGraphicsFormWidthAdvisoryReachesResult(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		source  string
-		dialect Dialect
-	}{
-		{"image", "PRINT_IMG @\"image {1,-1}\"\n", CommonDialect},
-		{"space", "PRINT_SPACE STRLENS(@\"x {1,-1}\")\n", EMEE},
-	} {
+		dialect erabasic.Dialect
+	}{{"image", "PRINT_IMG @\"image {1,-1}\"\n", erabasic.CommonDialect}, {"space", "PRINT_SPACE STRLENS(@\"x {1,-1}\")\n", erabasic.EMEE}} {
 		t.Run(test.name, func(t *testing.T) {
-			r := FormatWithOptions([]byte(test.source), ERB, Options{Dialect: test.dialect, Select: []RuleID{FormPadding}})
+			r := FormatWithOptions([]byte(test.source), ERB, Options{Dialect: Dialect(test.dialect), Select: []RuleID{FormPadding}})
 			if !bytes.Equal(r.Output, []byte(test.source)) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Warning || r.Diagnostics[0].Code != "suspicious_form_width" {
 				t.Fatalf("output=%q diagnostics=%+v", r.Output, r.Diagnostics)
 			}

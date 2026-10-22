@@ -2,19 +2,13 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestDeclarationAndHeaderSpacing(t *testing.T) {
 	input := []byte("@F( ARG:0=1+2,ARG:1=3 )\n#DIM  CONST USER_X,1+2=1,2,3\n#DIMS strings\n")
-	options := Options{Select: []RuleID{
-		DeclarationWordSpacing,
-		DeclarationDefaultSpacing,
-		CommandSpacing,
-		BinarySpacing,
-		CommaSpacing,
-		DelimiterSpacing,
-	}}
+	options := Options{Select: []RuleID{DeclarationWordSpacing, DeclarationDefaultSpacing, CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing}}
 	result := FormatWithOptions(input, ERB, options)
 	if len(result.Diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", result.Diagnostics)
@@ -31,13 +25,11 @@ func TestReferenceDimensionsMayBeOmitted(t *testing.T) {
 	if string(result.Output) != "@F(ARG:0,)\n#DIM REF REF_X,,\n#DIMS DYNAMIC REF REF_S, 0,\n" || len(result.Diagnostics) != 0 {
 		t.Fatalf("output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
-
 	invalid := []byte("@F\n#DIM DIM_X, ,\n#DIM REF REF_Y,1,\n#DIM REF STATIC REF_Z,,\n#DIM REF REF REF_R,,\n#DIM REF REF_W,,,,\n#DIM REF REF_Q,, = 1\n")
 	result = FormatWithOptions(invalid, ERB, Options{Select: []RuleID{CommaSpacing, DeclarationWordSpacing}})
 	if string(result.Output) != string(invalid) || len(result.Diagnostics) != 4 || result.Diagnostics[0].Line != 3 {
 		t.Fatalf("invalid output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}
-
 	erh := []byte("#DIM REF REF_X, ,\n")
 	result = FormatWithOptions(erh, ERH, Options{Select: []RuleID{CommaSpacing}})
 	if string(result.Output) != string(erh) || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_declaration" {
@@ -74,7 +66,6 @@ func TestDeclarationDimensionsRejectDirectInvalidValues(t *testing.T) {
 			t.Fatalf("diagnostics=%+v", result.Diagnostics)
 		}
 	}
-
 	for _, value := range []string{"UNKNOWN", "1+2", "UNKNOWN+1", "EFAUDIT_DIM,0"} {
 		r := FormatWithOptions([]byte("@F\n#DIM DIM_X,"+value+"\n"), ERB, Options{})
 		if len(r.Diagnostics) != 0 {
@@ -144,11 +135,7 @@ func TestDeclarationInitializerAllowsOneTerminalComma(t *testing.T) {
 	if !bytes.Contains(result.Output, []byte("#DIM VALUE, 2 = 1, 2,")) || !bytes.Contains(result.Output, []byte("#DIMS LABELS = \"a\", \"b\",")) {
 		t.Fatalf("terminal initializer comma was not preserved: %q", result.Output)
 	}
-
-	for _, source := range []string{
-		"@F\n#DIM VALUE,2=1,,\n",
-		"@F\n#DIM VALUE,2=,1\n",
-	} {
+	for _, source := range []string{"@F\n#DIM VALUE,2=1,,\n", "@F\n#DIM VALUE,2=,1\n"} {
 		result = FormatWithOptions([]byte(source), ERB, Options{})
 		if len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "suspicious_initializer" {
 			t.Fatalf("invalid initializer omission was accepted: source=%q diagnostics=%+v output=%q", source, result.Diagnostics, result.Output)
@@ -167,13 +154,7 @@ func TestObjectDefineBoundarySpacingPreservesBody(t *testing.T) {
 	if !bytes.Equal(again.Output, result.Output) {
 		t.Fatalf("object define spacing is not idempotent: first=%q second=%q", result.Output, again.Output)
 	}
-
-	for _, source := range []string{
-		"#DEFINE FOO(x) 1\n",
-		"#DEFINE [[FOO]] 1\n",
-		"#DEFINE FOO 1 ;!; RETURN 2\n",
-		"#define  FOO  1\n",
-	} {
+	for _, source := range []string{"#DEFINE FOO(x) 1\n", "#DEFINE [[FOO]] 1\n", "#DEFINE FOO 1 ;!; RETURN 2\n", "#define  FOO  1\n"} {
 		result = FormatWithOptions([]byte(source), ERH, Options{Select: []RuleID{DeclarationWordSpacing}})
 		if !bytes.Equal(result.Output, []byte(source)) {
 			t.Fatalf("uncertain define was changed: source=%q output=%q diagnostics=%+v", source, result.Output, result.Diagnostics)
@@ -194,7 +175,6 @@ func TestERHCharadataRejectsProvenThirdDimension(t *testing.T) {
 	if !bytes.Contains(result.Output, []byte("#DIM CHARADATA CHARA2, 2, 2")) || !bytes.Contains(result.Output, []byte("#DIM CHARADATA CHARA3,2,2,2")) {
 		t.Fatalf("CHARADATA shape formatting=%q", result.Output)
 	}
-
 	local := FormatWithOptions([]byte("@F\n#DIM CHARADATA CHARA3,2,2,2\n"), ERB, Options{})
 	if len(local.Diagnostics) != 1 || local.Diagnostics[0].Code != "unsupported_syntax" {
 		t.Fatalf("local CHARADATA diagnostic=%+v output=%q", local.Diagnostics, local.Output)
@@ -203,12 +183,7 @@ func TestERHCharadataRejectsProvenThirdDimension(t *testing.T) {
 
 func TestUnsupportedDeclarationKeepsEarlierFunctionEditsRolledBack(t *testing.T) {
 	input := []byte("@F\n#DIM USER_VAR,1+2\n#DIM RESULT\nRETURN 1\n@G\nRETURN 1+2\n")
-	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{
-		FunctionIndent,
-		DeclarationIndent,
-		InstructionIndent,
-		BinarySpacing,
-	}})
+	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{FunctionIndent, DeclarationIndent, InstructionIndent, BinarySpacing}})
 	wantPrefix := []byte("@F\n#DIM USER_VAR,1+2\n#DIM RESULT\nRETURN 1\n")
 	if !bytes.HasPrefix(result.Output, wantPrefix) {
 		t.Fatalf("preserved function was changed: output=%q diagnostics=%+v", result.Output, result.Diagnostics)
@@ -255,12 +230,7 @@ func TestDeclarationDimensionValidationFollowsExpressionSelection(t *testing.T) 
 
 func TestDeclarationModifierBoundaries(t *testing.T) {
 	input := []byte("@F\n#DIM CONST1,2=1\n#DIM REF0,2=1\n#DIM STATIC2,2=1\n#DIM PUBLIC,2=1\n#DIM CONST USER_X,1=1\n")
-	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{
-		DeclarationWordSpacing,
-		DeclarationDefaultSpacing,
-		CommaSpacing,
-		BinarySpacing,
-	}})
+	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{DeclarationWordSpacing, DeclarationDefaultSpacing, CommaSpacing, BinarySpacing}})
 	want := "@F\n#DIM CONST1, 2 = 1\n#DIM REF0, 2 = 1\n#DIM STATIC2, 2 = 1\n#DIM PUBLIC, 2 = 1\n#DIM CONST USER_X, 1 = 1\n"
 	if string(result.Output) != want || len(result.Diagnostics) != 0 {
 		t.Fatalf("output=%q diagnostics=%+v", result.Output, result.Diagnostics)
@@ -284,11 +254,7 @@ func TestHeaderCommaAndDelimiterOwnership(t *testing.T) {
 	for _, tc := range []struct {
 		rules []RuleID
 		want  string
-	}{
-		{[]RuleID{DelimiterSpacing}, "@F , ARG\n@G(ARG)\n"},
-		{[]RuleID{CommaSpacing}, "@F, ARG\n@G ( ARG )\n"},
-		{[]RuleID{DelimiterSpacing, CommaSpacing}, "@F, ARG\n@G(ARG)\n"},
-	} {
+	}{{[]RuleID{DelimiterSpacing}, "@F , ARG\n@G(ARG)\n"}, {[]RuleID{CommaSpacing}, "@F, ARG\n@G ( ARG )\n"}, {[]RuleID{DelimiterSpacing, CommaSpacing}, "@F, ARG\n@G(ARG)\n"}} {
 		r := FormatWithOptions(input, ERB, Options{Select: tc.rules})
 		if string(r.Output) != tc.want || len(r.Diagnostics) != 0 {
 			t.Fatalf("rules %v: output %q, diagnostics %+v", tc.rules, r.Output, r.Diagnostics)
@@ -307,11 +273,7 @@ func TestHeaderCommaAndDelimiterOwnership(t *testing.T) {
 
 func TestDeclarationOpaqueRegions(t *testing.T) {
 	input := []byte("#DEFINE X  A+B\n#DIM [[ALIAS]] = A+B\n")
-	options := Options{Select: []RuleID{
-		DeclarationWordSpacing,
-		DeclarationDefaultSpacing,
-		BinarySpacing,
-	}}
+	options := Options{Select: []RuleID{DeclarationWordSpacing, DeclarationDefaultSpacing, BinarySpacing}}
 	result := FormatWithOptions(input, ERB, options)
 	if !bytes.Equal(result.Output, input) {
 		t.Fatalf("opaque declaration changed: %q", result.Output)
@@ -332,12 +294,7 @@ func TestLocalSizeUsesExpressionRules(t *testing.T) {
 
 func TestUncertainDeclarationsRollbackTheirEdits(t *testing.T) {
 	input := []byte("@F(A=)\n#DIM CONST USER_X,\n")
-	options := Options{Select: []RuleID{
-		DeclarationWordSpacing,
-		DeclarationDefaultSpacing,
-		BinarySpacing,
-		CommaSpacing,
-	}}
+	options := Options{Select: []RuleID{DeclarationWordSpacing, DeclarationDefaultSpacing, BinarySpacing, CommaSpacing}}
 	result := FormatWithOptions(input, ERB, options)
 	if !bytes.Equal(result.Output, input) {
 		t.Fatalf("uncertain declaration changed: %q", result.Output)
@@ -346,12 +303,7 @@ func TestUncertainDeclarationsRollbackTheirEdits(t *testing.T) {
 
 func TestEmptyHeaderFieldsStayOpaque(t *testing.T) {
 	input := []byte("@F(X, )\n@F(ARG= )\n#DIM CONST USER_X, \n#DIM CONST USER_Y = \n")
-	options := Options{Select: []RuleID{
-		DeclarationWordSpacing,
-		DeclarationDefaultSpacing,
-		CommaSpacing,
-		DelimiterSpacing,
-	}}
+	options := Options{Select: []RuleID{DeclarationWordSpacing, DeclarationDefaultSpacing, CommaSpacing, DelimiterSpacing}}
 	result := FormatWithOptions(input, ERB, options)
 	if !bytes.Equal(result.Output, input) {
 		t.Fatalf("empty field changed: %q", result.Output)

@@ -1,6 +1,8 @@
 package format
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestAdditionalXMLMethodContracts(t *testing.T) {
 	tests := []struct {

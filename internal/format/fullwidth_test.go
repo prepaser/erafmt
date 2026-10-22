@@ -3,43 +3,9 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
-
-func TestFullwidthSpaceHelpers(t *testing.T) {
-	src := []byte("\u3000\tvalue\u3000")
-	if got := trimInput(src, false); !bytes.Equal(got, src) {
-		t.Fatalf("trimInput(default) = %q, want unchanged", got)
-	}
-	if got := trimInput(src, true); string(got) != "value" {
-		t.Fatalf("trimInput(allow) = %q, want value", got)
-	}
-	got, _, _, _ := headOfWithSpace([]byte("\u3000;#;\u3000RETURN 1"), true)
-	if string(got) != "RETURN 1" {
-		t.Fatalf("headOfWithSpace = %q, want RETURN 1", got)
-	}
-	if command, end := commandOfWithSpace([]byte("RETURN\u30001"), true); command != "RETURN" || end != len("RETURN") {
-		t.Fatalf("commandOfWithSpace = %q, %d", command, end)
-	}
-}
-
-func TestFullwidthHeaderSpaceOption(t *testing.T) {
-	valid := []string{
-		"@\u3000F",
-		"@F\u3000(ARG:0)",
-		"@F(ARG:0\u3000+ 1)",
-		"@F(1)\u3000; note",
-	}
-	for _, source := range valid {
-		src := []byte(source)
-		if got := validateHeader(src); got.status != headerUnsupported {
-			t.Errorf("validateHeader(%q) = %v %q, want unsupported", source, got.status, got.message)
-		}
-		session := newExpressionSessionWithSpace(src, true)
-		if got := validateHeaderWithSession(src, session); got.status != headerValid {
-			t.Errorf("validateHeaderWithSession(%q) = %v %q, want valid", source, got.status, got.message)
-		}
-	}
-}
 
 func TestFullwidthFormPayloadIsNotWhitespace(t *testing.T) {
 	src := []byte(`@"x {A　+1}　　literal"`)
@@ -47,8 +13,8 @@ func TestFullwidthFormPayloadIsNotWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := newExpressionSessionWithSpace(src, true)
-	edits, err := formEditsWithSession(session, expressionSourceOriginal, src, 0, rules, formQuoted, true)
+	session := erabasic.NewExpressionSessionWithSpace(src, true)
+	edits, err := formEditsWithSession(session, erabasic.ExpressionSourceOriginal, src, 0, rules, erabasic.FormQuoted, true)
 	if err != nil {
 		t.Fatal(err)
 	}

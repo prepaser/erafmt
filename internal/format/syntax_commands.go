@@ -1,141 +1,45 @@
 package format
 
-import "bytes"
+import (
+	"bytes"
 
-type registeredMode uint8
-
-const (
-	registeredScalar registeredMode = iota
-	registeredFields
-	registeredForm
-	registeredPrintV
-	registeredRaw
-	registeredNoArg
-	registeredInput
-	registeredTimedInput
-	registeredInputS
-	registeredArraySort
-	registeredSortChara
-	registeredHTMLTagSplit
-	registeredVariable
-	registeredDTColumnOptions
-	registeredFormAny
-	registeredBit
-	registeredSetter
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
-
-const (
-	dialectCommonMask uint8 = 1 << iota
-	dialectEmueraMask
-	dialectEMEEMask
-)
-
-type registeredSpec struct {
-	mode      registeredMode
-	min       uint8
-	max       uint8
-	dialects  uint8
-	unbounded bool
-}
-
-var registeredCommandSpecs = buildRegisteredCommandSpecs()
-
-func buildRegisteredCommandSpecs() map[string]registeredSpec {
-	m := make(map[string]registeredSpec)
-	add := func(mode registeredMode, min, max uint8, dialects uint8, names ...string) {
-		for _, name := range names {
-			m[name] = registeredSpec{mode: mode, min: min, max: max, dialects: dialects}
-		}
-	}
-	addUnbounded := func(mode registeredMode, min uint8, dialects uint8, names ...string) {
-		for _, name := range names {
-			m[name] = registeredSpec{mode: mode, min: min, dialects: dialects, unbounded: true}
-		}
-	}
-	all := dialectCommonMask | dialectEmueraMask | dialectEMEEMask
-	add(registeredScalar, 0, 1, all, "SETFONT", "FONTSTYLE")
-	add(registeredScalar, 1, 1, all, "LOADDATA", "ASSERT", "LOADCHARA", "LOADVAR", "TOOLTIP_SETDELAY", "TOOLTIP_SETDURATION")
-	add(registeredFields, 0, 1, all, "PRINTCPERLINE", "SAVENOS")
-	add(registeredFields, 1, 2, all, "HTML_PRINT")
-	add(registeredFields, 1, 3, all, "SETCOLOR", "SETBGCOLOR")
-	add(registeredFields, 2, 2, all, "PRINTBUTTON", "PRINTBUTTONC", "PRINTBUTTONLC")
-	add(registeredFields, 3, 3, all, "BAR", "BARL")
-	add(registeredFields, 2, 2, all, "TWAIT", "SWAPCHARA", "COPYCHARA")
-	addUnbounded(registeredFields, 1, all, "ADDCHARA", "ADDSPCHARA", "ADDCOPYCHARA", "PICKUPCHARA", "DELCHARA")
-	add(registeredFields, 2, 2, all, "SAVEDATA")
-	addUnbounded(registeredFields, 3, all, "SAVECHARA")
-	add(registeredFields, 3, 255, all, "SAVEVAR")
-	add(registeredFields, 3, 3, all, "ARRAYREMOVE")
-	add(registeredFields, 3, 5, all, "ARRAYSHIFT")
-	add(registeredFields, 2, 2, all, "ARRAYCOPY")
-	add(registeredArraySort, 1, 4, all, "ARRAYSORT")
-	add(registeredSortChara, 0, 2, all, "SORTCHARA")
-	add(registeredHTMLTagSplit, 1, 3, all, "HTML_TAGSPLIT")
-	add(registeredInput, 0, 3, all, "INPUT", "ONEINPUT")
-	add(registeredTimedInput, 2, 6, all, "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS")
-	add(registeredInputS, 0, 2, all, "INPUTS", "ONEINPUTS")
-	add(registeredInput, 0, 3, dialectEMEEMask, "BINPUT", "ONEBINPUT")
-	add(registeredInputS, 0, 2, dialectEMEEMask, "BINPUTS", "ONEBINPUTS")
-	add(registeredForm, 0, 0, all, "THROW", "PUTFORM", "PRINTPLAINFORM", "DEBUGPRINTFORM", "DEBUGPRINTFORML", "STRLENFORM", "STRLENFORMU", "ENCODETOUNI", "REUSELASTLINE")
-	add(registeredBit, 2, 255, all, "SETBIT", "CLEARBIT", "INVERTBIT")
-	add(registeredSetter, 0, 255, all, "VARSET", "CVARSET", "POWER")
-	add(registeredForm, 1, 1, all, "DRAWLINEFORM")
-	add(registeredNoArg, 0, 0, all, "WAIT", "FORCEWAIT", "WAITANYKEY")
-	add(registeredRaw, 0, 0, dialectEMEEMask, "PRINTN")
-	add(registeredPrintV, 0, 0, dialectEMEEMask, "PRINTVN")
-	add(registeredScalar, 1, 1, dialectEMEEMask, "PRINTSN")
-	add(registeredForm, 0, 0, dialectEMEEMask, "PRINTFORMN")
-	add(registeredScalar, 1, 1, dialectEMEEMask, "PRINTFORMSN")
-	add(registeredNoArg, 0, 0, all, "RESETCOLOR", "RESETBGCOLOR", "FONTBOLD", "FONTITALIC", "FONTREGULAR", "SAVEGLOBAL", "LOADGLOBAL", "RESETDATA", "RESETGLOBAL", "DEBUGCLEAR", "DUMPRAND", "INITRAND", "RESTART", "SAVEGAME", "LOADGAME", "ADDVOIDCHARA")
-	add(registeredRaw, 0, 0, all, "BEGIN", "CALLEVENT", "ALIGNMENT", "SETCOLORBYNAME", "SETBGCOLORBYNAME", "STRLEN", "STRLENU")
-	add(registeredRaw, 0, 0, dialectEMEEMask, "FORCE_BEGIN")
-	add(registeredScalar, 0, 1, all, "AWAIT", "INPUTMOUSEKEY", "RANDOMIZE")
-	add(registeredNoArg, 0, 0, dialectEMEEMask, "INPUTANY", "STOPBGM", "STOPSOUND", "UPDATECHECK", "HTML_PRINT_ISLAND_CLEAR", "CLEARBGIMAGE")
-	add(registeredScalar, 0, 1, dialectEMEEMask, "BREAKBUTTON")
-	add(registeredScalar, 1, 1, dialectEMEEMask, "SETBGMVOLUME", "SETSOUNDVOLUME", "TOOLTIP_SETFONTSIZE", "TOOLTIP_CUSTOM", "TOOLTIP_FORMAT", "TOOLTIP_IMG", "PLAYBGM", "TOOLTIP_SETFONT")
-	add(registeredFields, 1, 2, dialectEMEEMask, "PLAYSOUND", "HTML_PRINT_ISLAND")
-	add(registeredFields, 2, 2, all, "TOOLTIP_SETCOLOR")
-	add(registeredVariable, 1, 1, all, "VARSIZE")
-	add(registeredDTColumnOptions, 4, 255, dialectEMEEMask, "DT_COLUMN_OPTIONS")
-	add(registeredFormAny, 1, 255, dialectEMEEMask, "SETBGIMAGE", "REMOVEBGIMAGE")
-	return m
-}
 
 func (p *formatter) syntaxRegistered(i int, head []byte, base int, command string, wordEnd int) (int, bool) {
-	spec, ok := registeredCommandSpecs[command]
-	if !ok || !registeredDialect(spec.dialects, p.dialect) {
+	spec, ok := erabasic.RegisteredCommandSpec(command, p.Dialect)
+	if !ok {
 		return -1, false
 	}
-
-	switch spec.mode {
-	case registeredRaw:
+	switch spec.Mode {
+	case erabasic.RegisteredRaw:
 		p.syntaxOpaque(i)
 		return -1, true
-	case registeredNoArg:
+	case erabasic.RegisteredNoArg:
 		return p.syntaxRegisteredNoArg(i, head, base, wordEnd), true
-	case registeredForm:
+	case erabasic.RegisteredForm:
 		return p.syntaxRegisteredForm(i, head, base, wordEnd, spec), true
-	case registeredPrintV:
+	case erabasic.RegisteredPrintV:
 		return p.syntaxRegisteredPrintV(i, head, base, wordEnd), true
-	case registeredInputS:
+	case erabasic.RegisteredInputS:
 		return p.syntaxRegisteredInputS(i, head, base, wordEnd), true
-	case registeredArraySort:
+	case erabasic.RegisteredArraySort:
 		return p.syntaxRegisteredArraySort(i, head, base, wordEnd, spec), true
-	case registeredSortChara:
+	case erabasic.RegisteredSortChara:
 		return p.syntaxRegisteredSortChara(i, head, base, wordEnd, spec), true
-	case registeredHTMLTagSplit:
+	case erabasic.RegisteredHTMLTagSplit:
 		return p.syntaxRegisteredHTMLTagSplit(i, head, base, wordEnd, spec), true
-	case registeredVariable:
+	case erabasic.RegisteredVariable:
 		return p.syntaxRegisteredVariable(i, head, base, wordEnd), true
-	case registeredDTColumnOptions:
+	case erabasic.RegisteredDTColumnOptions:
 		return p.syntaxRegisteredDTColumnOptions(i, head, base, wordEnd), true
-	case registeredFormAny:
+	case erabasic.RegisteredFormAny:
 		return p.syntaxRegisteredFormAny(i, head, base, wordEnd), true
-	case registeredBit:
+	case erabasic.RegisteredBit:
 		return p.syntaxBits(i, head, base, wordEnd), true
-	case registeredSetter:
+	case erabasic.RegisteredSetter:
 		return p.syntaxSetters(i, head, base, wordEnd, command), true
-	case registeredFields, registeredScalar, registeredInput, registeredTimedInput:
+	case erabasic.RegisteredFields, erabasic.RegisteredScalar, erabasic.RegisteredInput, erabasic.RegisteredTimedInput:
 		if command == "SAVEVAR" {
 			return p.syntaxSAVEVAR(i, head, base, wordEnd), true
 		}
@@ -146,7 +50,7 @@ func (p *formatter) syntaxRegistered(i int, head []byte, base int, command strin
 }
 
 func (p *formatter) syntaxRegisteredFormAny(i int, head []byte, base, wordEnd int) int {
-	start, end, ok := registeredFormAnyBody(head, wordEnd, p.allowFullwidthSpace)
+	start, end, ok := erabasic.RegisteredFormAnyBody(head, wordEnd, p.AllowFullwidthSpace)
 	if !ok || start >= end {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, base+wordEnd, "command requires a FORM argument")
@@ -162,27 +66,28 @@ func (p *formatter) syntaxRegisteredFormAny(i int, head []byte, base, wordEnd in
 }
 
 func (p *formatter) syntaxRegisteredVariable(i int, head []byte, base, wordEnd int) int {
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
-	if !ok || !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	analysis := p.commandAnalysisContext()
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
+	if !ok || !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, base+wordEnd, "VARSIZE requires an array identifier")
 		}
 		p.syntaxOpaque(i)
 		return -1
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if commandFieldHasMandatoryMarker(p.src[base+start : codeEnd]) {
+	if erabasic.CommandFieldHasMandatoryMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	left := trimInputLeft(p.src, base+start, codeEnd, p.allowFullwidthSpace)
-	right := trimInputRight(p.src, left, codeEnd, p.allowFullwidthSpace)
-	session := p.scanSession(p.src, left, right)
-	prefixEnd, prefixOK := labelIdentifierEndWithSession(p.src[left:right], 0, session)
+	left := erabasic.TrimInputLeft(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
+	right := erabasic.TrimInputRight(p.Src, left, codeEnd, p.AllowFullwidthSpace)
+	session, offset := analysis.ExpressionSessionFor(left, right)
+	prefixEnd, prefixOK := erabasic.LabelIdentifierEndWithSession(p.Src[left:right], 0, session)
 	prefixEnd += left
 	if !prefixOK {
 		if p.expressionParseEnabled() {
@@ -191,24 +96,24 @@ func (p *formatter) syntaxRegisteredVariable(i int, head []byte, base, wordEnd i
 		p.syntaxOpaque(i)
 		return -1
 	}
-	tokens, err := session.lexRange(expressionSourceOriginal, 0, prefixEnd-left, left)
-	if err != nil || len(tokens) != 1 || tokens[0].kind != exprIdentifier {
+	tokens, err := session.LexRange(erabasic.ExpressionSourceOriginal, offset, offset+prefixEnd-left, left)
+	if err != nil || len(tokens) != 1 || tokens[0].Kind != erabasic.ExprIdentifier {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, left, "VARSIZE requires a bare array identifier")
 		}
 		p.syntaxOpaque(i)
 		return -1
 	}
-	info, known := builtinVariableInfoForDialect(tokens, p.dialect)
+	info, known := erabasic.BuiltinVariableInfoForDialect(tokens, analysis.Dialect)
 	if p.expressionParseEnabled() {
-		if known && (info.rank == 0 || string(tokens[0].text) == "RAND") {
+		if known && (info.Rank == 0 || string(tokens[0].Text) == "RAND") {
 			p.syntaxProblem(i, left, "VARSIZE requires an array identifier")
 			p.syntaxOpaque(i)
 			return -1
 		}
 	}
 	if prefixEnd != right {
-		if known && info.rank > 0 && string(tokens[0].text) != "RAND" && p.expressionParseEnabled() {
+		if known && info.Rank > 0 && string(tokens[0].Text) != "RAND" && p.expressionParseEnabled() {
 			p.ignoredCommandArguments(i, codeEnd, "VARSIZE")
 		}
 		p.syntaxOpaque(i)
@@ -220,6 +125,7 @@ func (p *formatter) syntaxRegisteredVariable(i int, head []byte, base, wordEnd i
 }
 
 func (p *formatter) syntaxRegisteredDTColumnOptions(i int, head []byte, base, wordEnd int) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
 	fail := func(offset int, message string) int {
 		p.truncateEdits(mark)
@@ -229,16 +135,16 @@ func (p *formatter) syntaxRegisteredDTColumnOptions(i int, head []byte, base, wo
 		p.syntaxOpaque(i)
 		return -1
 	}
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
-	if !ok || !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
+	if !ok || !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		return fail(base+wordEnd, "DT_COLUMN_OPTIONS requires arguments")
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
 	if len(parts) > 0 {
 		last := parts[len(parts)-1]
-		left := trimInputLeft(p.src, last.start, last.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, last.end, p.allowFullwidthSpace)
+		left := erabasic.TrimInputLeft(p.Src, last.Start, last.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, last.End, p.AllowFullwidthSpace)
 		if left == right {
 			parts = parts[:len(parts)-1]
 		}
@@ -247,13 +153,13 @@ func (p *formatter) syntaxRegisteredDTColumnOptions(i int, head []byte, base, wo
 		return fail(base+start, "DT_COLUMN_OPTIONS requires column options")
 	}
 	for n, field := range parts {
-		left := trimInputLeft(p.src, field.start, field.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, field.end, p.allowFullwidthSpace)
+		left := erabasic.TrimInputLeft(p.Src, field.Start, field.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, field.End, p.AllowFullwidthSpace)
 		if left == right {
-			return fail(field.start, "empty DT_COLUMN_OPTIONS argument")
+			return fail(field.Start, "empty DT_COLUMN_OPTIONS argument")
 		}
 		if n >= 2 && n%2 == 0 {
-			if !bytes.EqualFold(p.src[left:right], []byte("DEFAULT")) {
+			if !bytes.EqualFold(p.Src[left:right], []byte("DEFAULT")) {
 				return fail(left, "DT_COLUMN_OPTIONS has an unknown option")
 			}
 			continue
@@ -266,20 +172,9 @@ func (p *formatter) syntaxRegisteredDTColumnOptions(i int, head []byte, base, wo
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	codeEnd = trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+	codeEnd = erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 	p.setCodeEnd(i, codeEnd)
 	return codeEnd
-}
-
-func registeredDialect(mask uint8, dialect Dialect) bool {
-	switch dialect {
-	case Emuera1824:
-		return mask&dialectEmueraMask != 0
-	case EMEE:
-		return mask&dialectEMEEMask != 0
-	default:
-		return mask&dialectCommonMask != 0
-	}
 }
 
 func (p *formatter) syntaxRegisteredNoArg(i int, head []byte, base, wordEnd int) int {
@@ -295,9 +190,9 @@ func (p *formatter) syntaxRegisteredNoArg(i int, head []byte, base, wordEnd int)
 		p.syntaxOpaque(i)
 		return -1
 	}
-	tail := wordEnd + inputSpaceSize(head, wordEnd, p.allowFullwidthSpace)
+	tail := wordEnd + erabasic.InputSpaceSize(head, wordEnd, p.AllowFullwidthSpace)
 	for tail < len(head) {
-		size := inputSpaceSize(head, tail, p.allowFullwidthSpace)
+		size := erabasic.InputSpaceSize(head, tail, p.AllowFullwidthSpace)
 		if size == 0 {
 			break
 		}
@@ -311,8 +206,8 @@ func (p *formatter) syntaxRegisteredNoArg(i int, head []byte, base, wordEnd int)
 	return base + wordEnd
 }
 
-func (p *formatter) syntaxRegisteredForm(i int, head []byte, base, wordEnd int, spec registeredSpec) int {
-	if spec.min > 0 && wordEnd+max(1, inputSpaceSize(head, wordEnd, p.allowFullwidthSpace)) >= len(head) {
+func (p *formatter) syntaxRegisteredForm(i int, head []byte, base, wordEnd int, spec erabasic.RegisteredSpec) int {
+	if spec.Min > 0 && wordEnd+max(1, erabasic.InputSpaceSize(head, wordEnd, p.AllowFullwidthSpace)) >= len(head) {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, base+wordEnd, "missing FORM argument")
 		}
@@ -326,14 +221,14 @@ func (p *formatter) syntaxRegisteredForm(i int, head []byte, base, wordEnd int, 
 		p.syntaxOpaque(i)
 		return -1
 	}
-	start := base + wordEnd + inputSpaceSize(head, wordEnd, p.allowFullwidthSpace)
+	start := base + wordEnd + erabasic.InputSpaceSize(head, wordEnd, p.AllowFullwidthSpace)
 	if start == base+wordEnd {
 		start++
 	}
 	if !p.expressionRulesEnabled() {
 		return -1
 	}
-	if !p.syntaxForm(i, start, base+len(head), formLine) {
+	if !p.syntaxForm(i, start, base+len(head), erabasic.FormLine) {
 		p.syntaxOpaque(i)
 	}
 	return -1
@@ -347,8 +242,8 @@ func (p *formatter) syntaxRegisteredPrintV(i int, head []byte, base, wordEnd int
 		p.syntaxOpaque(i)
 		return -1
 	}
-	start := wordEnd + inputSpaceSize(head, wordEnd, p.allowFullwidthSpace)
-	arg := trimInputLeft(head, start, len(head), p.allowFullwidthSpace)
+	start := wordEnd + erabasic.InputSpaceSize(head, wordEnd, p.AllowFullwidthSpace)
+	arg := erabasic.TrimInputLeft(head, start, len(head), p.AllowFullwidthSpace)
 	if p.rules[CommandSpacing] && arg < len(head) && head[arg] != ';' {
 		p.addEdit(i, base+wordEnd, base+arg, []byte{' '}, CommandSpacing)
 	}
@@ -361,15 +256,16 @@ func (p *formatter) syntaxRegisteredPrintV(i int, head []byte, base, wordEnd int
 	return -1
 }
 
-func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEnd int, command string, spec registeredSpec) int {
+func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEnd int, command string, spec erabasic.RegisteredSpec) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
-		if spec.min == 0 {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
+		if spec.Min == 0 {
 			p.setCodeEnd(i, base+wordEnd)
 			return base + wordEnd
 		}
@@ -385,40 +281,40 @@ func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEn
 	if comment < 0 {
 		codeEnd = base + end
 	}
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	parts := p.splitTopLevel(p.src, arg, codeEnd, ',')
+	parts := analysis.SplitTopLevel(p.Src, arg, codeEnd, ',')
 	if !p.expressionParseEnabled() {
-		p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
-		return trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+		p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
+		return erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 	}
-	max := int(spec.max)
-	if p.dialect == Emuera1824 {
-		switch spec.mode {
-		case registeredInput:
+	max := int(spec.Max)
+	if p.Dialect == erabasic.Emuera1824 {
+		switch spec.Mode {
+		case erabasic.RegisteredInput:
 			max = 1
-		case registeredTimedInput:
+		case erabasic.RegisteredTimedInput:
 			max = 4
 		}
 	}
-	if command == "HTML_PRINT" && p.dialect == Emuera1824 {
+	if command == "HTML_PRINT" && p.Dialect == erabasic.Emuera1824 {
 		max = 1
 	}
-	allowTrailing := spec.mode == registeredFields || spec.mode == registeredTimedInput
-	if spec.unbounded {
+	allowTrailing := spec.Mode == erabasic.RegisteredFields || spec.Mode == erabasic.RegisteredTimedInput
+	if spec.Unbounded {
 		max = len(parts)
 	}
-	parts, overflow := commandPrefixParts(p.src, parts, max, int(spec.min), p.allowFullwidthSpace, allowTrailing)
-	if spec.mode == registeredScalar && len(parts) < 1 && spec.min > 0 {
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, max, int(spec.Min), p.AllowFullwidthSpace, allowTrailing)
+	if spec.Mode == erabasic.RegisteredScalar && len(parts) < 1 && spec.Min > 0 {
 		p.syntaxProblem(i, arg, "expected one command argument")
 		p.syntaxOpaque(i)
 		return -1
 	}
 	if command == "SETCOLOR" || command == "SETBGCOLOR" {
 		if len(parts) != 1 && len(parts) != 3 {
-			if len(parts) < 3 && p.commandFieldsMayExpand(parts) {
+			if len(parts) < 3 && analysis.CommandFieldsMayExpand(parts) {
 				p.truncateEdits(mark)
 				p.syntaxOpaque(i)
 				return -1
@@ -428,8 +324,8 @@ func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEn
 			return -1
 		}
 	}
-	if len(parts) < int(spec.min) {
-		if p.commandFieldsMayExpand(parts) {
+	if len(parts) < int(spec.Min) {
+		if analysis.CommandFieldsMayExpand(parts) {
 			p.truncateEdits(mark)
 			p.syntaxOpaque(i)
 			return -1
@@ -438,36 +334,36 @@ func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEn
 		p.syntaxOpaque(i)
 		return -1
 	}
-	roles := commandRoles{}
+	roles := erabasic.CommandRoles{}
 	saveCharaIDs := make(map[int64]struct{})
 	for n, field := range parts {
-		left := trimInputLeft(p.src, field.start, field.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, field.end, p.allowFullwidthSpace)
+		left := erabasic.TrimInputLeft(p.Src, field.Start, field.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, field.End, p.AllowFullwidthSpace)
 		if left == right {
-			if spec.mode != registeredInput {
+			if spec.Mode != erabasic.RegisteredInput {
 				p.truncateEdits(mark)
 				if p.expressionParseEnabled() {
-					p.syntaxProblem(i, field.start, "empty command argument")
+					p.syntaxProblem(i, field.Start, "empty command argument")
 				}
 				p.syntaxOpaque(i)
 				return -1
 			}
 			continue
 		}
-		if !p.commandFieldTypeValid(command, n, left, right, &roles) {
+		if !analysis.CommandFieldTypeValid(command, n, left, right, &roles) {
 			p.truncateEdits(mark)
 			p.syntaxProblem(i, left, "command argument has an incompatible type")
 			p.syntaxOpaque(i)
 			return -1
 		}
-		if (command == "SETCOLOR" || command == "SETBGCOLOR") && p.commandFieldHasUnpairedTernaryHashAt(left, right) {
+		if (command == "SETCOLOR" || command == "SETBGCOLOR") && analysis.CommandFieldHasUnpairedTernaryHashAt(left, right) {
 			p.truncateEdits(mark)
 			p.syntaxOpaque(i)
 			return -1
 		}
-		if command == "SAVECHARA" && n >= 2 && !roles.macro {
-			if tokens, err := p.commandFieldTokens(left, right); err == nil && !commandMacroPossibleForDialect(tokens, p.dialect) {
-				if value, kind := directIntegerLiteral(tokens); kind == knownValueNumeric {
+		if command == "SAVECHARA" && n >= 2 && !roles.Macro {
+			if tokens, err := analysis.CommandFieldTokens(left, right); err == nil && !erabasic.CommandMacroPossibleForDialect(tokens, analysis.Dialect) {
+				if value, kind := erabasic.DirectIntegerLiteral(tokens); kind == erabasic.KnownValueNumeric {
 					if value < 0 || value > 2147483647 {
 						p.truncateEdits(mark)
 						p.syntaxProblem(i, left, "SAVECHARA character ID is outside 0..2147483647")
@@ -484,12 +380,12 @@ func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEn
 				}
 			}
 		}
-		fieldValid := p.registeredFieldValid(command, n, p.src[left:right])
-		if n == 0 && commandFieldHasMandatoryMarker(p.src[left:right]) && (command == "ARRAYSHIFT" || command == "ARRAYREMOVE") {
-			fieldValid = commandFieldVariableArgument(p, left, right)
+		fieldValid := analysis.RegisteredFieldValid(command, n, p.Src[left:right])
+		if n == 0 && erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) && (command == "ARRAYSHIFT" || command == "ARRAYREMOVE") {
+			fieldValid = analysis.CommandFieldVariableArgument(left, right)
 			if command == "ARRAYSHIFT" {
-				if tokens, err := p.commandFieldTokens(left, right); err == nil {
-					if info, known := builtinVariableRoleInfo(tokens, p.dialect); known && info.rank != 1 {
+				if tokens, err := analysis.CommandFieldTokens(left, right); err == nil {
+					if info, known := erabasic.BuiltinVariableRoleInfo(tokens, analysis.Dialect); known && info.Rank != 1 {
 						fieldValid = false
 					}
 				}
@@ -522,45 +418,46 @@ func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEn
 		return -1
 	}
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	codeEnd = trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+	codeEnd = erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 	p.setCodeEnd(i, codeEnd)
 	return codeEnd
 }
 
 func (p *formatter) syntaxSAVEVAR(i int, head []byte, base, wordEnd int) int {
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	analysis := p.commandAnalysisContext()
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, base+wordEnd, "SAVEVAR requires arguments")
 		}
 		p.syntaxOpaque(i)
 		return -1
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
 	arg := base + start
-	if bytes.Contains(p.src[arg:codeEnd], []byte("[[")) {
+	if bytes.Contains(p.Src[arg:codeEnd], []byte("[[")) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	parts := p.splitTopLevel(p.src, arg, codeEnd, ',')
+	parts := analysis.SplitTopLevel(p.Src, arg, codeEnd, ',')
 	fields := parts
 	if len(fields) > 1 {
 		last := fields[len(fields)-1]
-		if p.trimInputLeft(last.start, last.end) >= p.trimInputRight(last.start, last.end) {
+		if p.trimInputLeft(last.Start, last.End) >= p.trimInputRight(last.Start, last.End) {
 			fields = fields[:len(fields)-1]
 		}
 	}
 	if !p.expressionParseEnabled() {
 		p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
-		codeEnd = trimInputRight(p.src, arg, codeEnd, p.allowFullwidthSpace)
+		codeEnd = erabasic.TrimInputRight(p.Src, arg, codeEnd, p.AllowFullwidthSpace)
 		p.setCodeEnd(i, codeEnd)
 		return codeEnd
 	}
@@ -574,44 +471,44 @@ func (p *formatter) syntaxSAVEVAR(i int, head []byte, base, wordEnd int) int {
 	macroPrefix := false
 	saveVarIDs := make(map[string]struct{})
 	for n, field := range fields {
-		left := p.trimInputLeft(field.start, field.end)
-		right := p.trimInputRight(left, field.end)
+		left := p.trimInputLeft(field.Start, field.End)
+		right := p.trimInputRight(left, field.End)
 		if left == right {
-			return fail(field.start, "empty SAVEVAR argument")
+			return fail(field.Start, "empty SAVEVAR argument")
 		}
-		tokens, err := p.lexSyntaxRange(left, right)
+		tokens, err := analysis.LexSyntaxRange(left, right)
 		if err != nil {
 			p.truncateEdits(mark)
 			p.expressionProblem(i, 0, err)
 			p.syntaxOpaque(i)
 			return -1
 		}
-		tokens = stripCommandMarkers(tokens)
-		potentialMacro := setterMacroPossibleForDialect(tokens, p.dialect)
+		tokens = erabasic.StripCommandMarkers(tokens)
+		potentialMacro := erabasic.SetterMacroPossibleForDialect(tokens, analysis.Dialect)
 		if !macroPrefix && !potentialMacro {
 			if n < 2 {
-				if knownExpressionTypeForDialect(tokens, p.dialect) == knownValueNumeric {
+				if erabasic.KnownExpressionTypeForDialect(tokens, analysis.Dialect) == erabasic.KnownValueNumeric {
 					return fail(left, "SAVEVAR requires string arguments")
 				}
 			} else {
-				if !variableArgumentTokens(tokens) {
+				if !erabasic.VariableArgumentTokens(tokens) {
 					return fail(left, "SAVEVAR requires a variable argument")
 				}
-				if savevarBuiltinTargetForbidden(tokens, p.dialect) {
+				if erabasic.SavevarBuiltinTargetForbidden(tokens, analysis.Dialect) {
 					return fail(left, "SAVEVAR cannot save a local or calculated variable")
 				}
-				if builtinVariableReadOnly(tokens, p.dialect) {
+				if erabasic.BuiltinVariableReadOnly(tokens, analysis.Dialect) {
 					return fail(left, "SAVEVAR cannot save a read-only variable")
 				}
-				if name, exact := variableSystemName(tokens); exact {
-					if info, known := builtinVariableInfoByName(name, p.dialect); known && info.character {
+				if name, exact := erabasic.VariableSystemName(tokens); exact {
+					if info, known := erabasic.BuiltinVariableInfoByName(name, analysis.Dialect); known && info.Character {
 						return fail(left, "SAVEVAR does not accept character variables")
 					}
 				}
-				if info, known := builtinVariableInfoForDialect(tokens, p.dialect); known && info.character {
+				if info, known := erabasic.BuiltinVariableInfoForDialect(tokens, analysis.Dialect); known && info.Character {
 					return fail(left, "SAVEVAR does not accept character variables")
 				}
-				if identity, proven := builtinVariableIdentity(tokens, p.dialect); proven {
+				if identity, proven := erabasic.BuiltinVariableIdentity(tokens, analysis.Dialect); proven {
 					if _, duplicate := saveVarIDs[identity]; duplicate {
 						return fail(left, "SAVEVAR contains a duplicate variable")
 					}
@@ -631,26 +528,14 @@ func (p *formatter) syntaxSAVEVAR(i int, head []byte, base, wordEnd int) int {
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	codeEnd = trimInputRight(p.src, arg, codeEnd, p.allowFullwidthSpace)
+	codeEnd = erabasic.TrimInputRight(p.Src, arg, codeEnd, p.AllowFullwidthSpace)
 	p.setCodeEnd(i, codeEnd)
 	return codeEnd
 }
 
-func savevarBuiltinTargetForbidden(tokens []exprToken, dialect Dialect) bool {
-	name, proven := builtinVariableIdentity(tokens, dialect)
-	if !proven {
-		return false
-	}
-	switch name {
-	case "ARG", "ARGS", "LOCAL", "LOCALS", "WINDOW_TITLE":
-		return true
-	default:
-		return false
-	}
-}
-
 func (p *formatter) syntaxRegisteredInputS(i int, head []byte, base, wordEnd int) int {
-	start, end, ok := registeredRawBodyWithSpace(head, wordEnd, p.allowFullwidthSpace)
+	analysis := p.commandAnalysisContext()
+	start, end, ok := erabasic.RegisteredRawBodyWithSpace(head, wordEnd, p.AllowFullwidthSpace)
 	if !ok {
 		p.syntaxOpaque(i)
 		return -1
@@ -659,15 +544,15 @@ func (p *formatter) syntaxRegisteredInputS(i int, head []byte, base, wordEnd int
 		p.setCodeEnd(i, base+wordEnd)
 		return base + wordEnd
 	}
-	if commandFieldHasDeferredMarker(head[start:end]) {
+	if erabasic.CommandFieldHasDeferredMarker(head[start:end]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if p.dialect == EMEE {
+	if p.Dialect == erabasic.EMEE {
 		mark := len(p.edits)
 		bodyStart := base + start
-		session, offset := p.expressionSessionFor(bodyStart, base+end)
-		formEnd, err := session.scanFormAt(expressionSourceOriginal, offset, offset+base+end-bodyStart, formComma)
+		session, offset := analysis.ExpressionSessionFor(bodyStart, base+end)
+		formEnd, err := session.ScanFormAt(erabasic.ExpressionSourceOriginal, offset, offset+base+end-bodyStart, erabasic.FormComma)
 		n := formEnd - offset
 		if err != nil {
 			p.truncateEdits(mark)
@@ -678,25 +563,25 @@ func (p *formatter) syntaxRegisteredInputS(i int, head []byte, base, wordEnd int
 			return -1
 		}
 		firstEnd := bodyStart + n
-		if p.expressionRulesEnabled() && !p.syntaxForm(i, bodyStart, firstEnd, formComma) {
+		if p.expressionRulesEnabled() && !p.syntaxForm(i, bodyStart, firstEnd, erabasic.FormComma) {
 			p.truncateEdits(mark)
 			p.syntaxOpaque(i)
 			return -1
 		}
 		if firstEnd < base+end {
-			if p.src[firstEnd] != ',' {
+			if p.Src[firstEnd] != ',' {
 				p.syntaxOpaque(i)
 				return -1
 			}
-			parts := p.splitTopLevel(p.src, firstEnd+1, base+end, ',')
-			parts, overflow := commandPrefixParts(p.src, parts, 2, 0, p.allowFullwidthSpace, true)
+			parts := analysis.SplitTopLevel(p.Src, firstEnd+1, base+end, ',')
+			parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, 2, 0, p.AllowFullwidthSpace, true)
 			for _, field := range parts {
-				left := trimInputLeft(p.src, field.start, field.end, p.allowFullwidthSpace)
-				right := trimInputRight(p.src, left, field.end, p.allowFullwidthSpace)
+				left := erabasic.TrimInputLeft(p.Src, field.Start, field.End, p.AllowFullwidthSpace)
+				right := erabasic.TrimInputRight(p.Src, left, field.End, p.AllowFullwidthSpace)
 				if left == right {
 					continue
 				}
-				if commandFieldHasDeferredMarker(p.src[left:right]) {
+				if erabasic.CommandFieldHasDeferredMarker(p.Src[left:right]) {
 					p.truncateEdits(mark)
 					p.syntaxOpaque(i)
 					return -1
@@ -720,12 +605,12 @@ func (p *formatter) syntaxRegisteredInputS(i int, head []byte, base, wordEnd int
 		}
 		return -1
 	}
-	if p.dialect == CommonDialect {
+	if p.Dialect == erabasic.CommonDialect {
 		bodyStart, bodyEnd := base+start, base+end
-		session, offset := p.expressionSessionFor(bodyStart, bodyEnd)
-		formEnd, err := session.scanFormAt(expressionSourceOriginal, offset, offset+bodyEnd-bodyStart, formComma)
+		session, offset := analysis.ExpressionSessionFor(bodyStart, bodyEnd)
+		formEnd, err := session.ScanFormAt(erabasic.ExpressionSourceOriginal, offset, offset+bodyEnd-bodyStart, erabasic.FormComma)
 		n := formEnd - offset
-		if err == nil && n < bodyEnd-bodyStart && p.src[bodyStart+n] == ',' {
+		if err == nil && n < bodyEnd-bodyStart && p.Src[bodyStart+n] == ',' {
 			if p.expressionParseEnabled() {
 				p.syntaxProblem(i, base+start, "INPUTS comma-separated arguments require a runtime dialect")
 			}
@@ -733,21 +618,22 @@ func (p *formatter) syntaxRegisteredInputS(i int, head []byte, base, wordEnd int
 			return -1
 		}
 	}
-	if p.expressionRulesEnabled() && !p.syntaxForm(i, base+start, base+end, formLine) {
+	if p.expressionRulesEnabled() && !p.syntaxForm(i, base+start, base+end, erabasic.FormLine) {
 		p.syntaxOpaque(i)
 	}
 	return -1
 }
 
-func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd int, spec registeredSpec) int {
+func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd int, spec erabasic.RegisteredSpec) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
-		if spec.min == 0 {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
+		if spec.Min == 0 {
 			p.setCodeEnd(i, base+wordEnd)
 			return base + wordEnd
 		}
@@ -757,27 +643,27 @@ func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd 
 		p.syntaxOpaque(i)
 		return -1
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	if !p.expressionParseEnabled() {
-		codeEnd = trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+		codeEnd = erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 		p.setCodeEnd(i, codeEnd)
 		return codeEnd
 	}
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
-	parts, overflow := commandPrefixParts(p.src, parts, int(spec.max), int(spec.min), p.allowFullwidthSpace, true)
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, int(spec.Max), int(spec.Min), p.AllowFullwidthSpace, true)
 	if len(parts) > 1 {
 		first := parts[0]
-		firstLeft := trimInputLeft(p.src, first.start, first.end, p.allowFullwidthSpace)
-		firstRight := trimInputRight(p.src, firstLeft, first.end, p.allowFullwidthSpace)
+		firstLeft := erabasic.TrimInputLeft(p.Src, first.Start, first.End, p.AllowFullwidthSpace)
+		firstRight := erabasic.TrimInputRight(p.Src, firstLeft, first.End, p.AllowFullwidthSpace)
 		second := parts[1]
-		left := trimInputLeft(p.src, second.start, second.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, second.end, p.allowFullwidthSpace)
-		if !p.commandFieldMayExpand(firstLeft, firstRight) && !p.commandFieldMayExpand(left, right) && !commandFieldKeyword(p, left, right, "FORWARD") && !commandFieldKeyword(p, left, right, "BACK") {
+		left := erabasic.TrimInputLeft(p.Src, second.Start, second.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, second.End, p.AllowFullwidthSpace)
+		if !analysis.CommandFieldMayExpand(firstLeft, firstRight) && !analysis.CommandFieldMayExpand(left, right) && !analysis.CommandFieldKeyword(left, right, "FORWARD") && !analysis.CommandFieldKeyword(left, right, "BACK") {
 			if p.expressionParseEnabled() {
 				p.syntaxProblem(i, left, "array sort range requires FORWARD or BACK")
 			}
@@ -788,19 +674,19 @@ func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd 
 	macroPrefix := false
 	directionKeyword := false
 	for n, field := range parts {
-		left := trimInputLeft(p.src, field.start, field.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, field.end, p.allowFullwidthSpace)
+		left := erabasic.TrimInputLeft(p.Src, field.Start, field.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, field.End, p.AllowFullwidthSpace)
 		if left == right {
 			p.truncateEdits(mark)
 			if p.expressionParseEnabled() {
-				p.syntaxProblem(i, field.start, "empty command argument")
+				p.syntaxProblem(i, field.Start, "empty command argument")
 			}
 			p.syntaxOpaque(i)
 			return -1
 		}
-		fieldMayExpand := p.commandFieldMayExpand(left, right)
+		fieldMayExpand := analysis.CommandFieldMayExpand(left, right)
 		if n == 1 {
-			keyword := commandFieldKeyword(p, left, right, "FORWARD") || commandFieldKeyword(p, left, right, "BACK")
+			keyword := analysis.CommandFieldKeyword(left, right, "FORWARD") || analysis.CommandFieldKeyword(left, right, "BACK")
 			if !keyword && !fieldMayExpand {
 				p.truncateEdits(mark)
 				p.syntaxOpaque(i)
@@ -824,14 +710,14 @@ func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd 
 			return -1
 		}
 		if n == 0 && !fieldMayExpand {
-			if tokens, err := p.commandFieldTokens(left, right); err == nil {
-				if builtinVariableReadOnly(tokens, p.dialect) {
+			if tokens, err := analysis.CommandFieldTokens(left, right); err == nil {
+				if erabasic.BuiltinVariableReadOnly(tokens, analysis.Dialect) {
 					p.truncateEdits(mark)
 					p.syntaxProblem(i, left, "ARRAYSORT requires a mutable array variable")
 					p.syntaxOpaque(i)
 					return -1
 				}
-				if info, known := builtinVariableRoleInfo(tokens, p.dialect); known && info.rank != 1 {
+				if info, known := erabasic.BuiltinVariableRoleInfo(tokens, analysis.Dialect); known && info.Rank != 1 {
 					p.truncateEdits(mark)
 					p.syntaxProblem(i, left, "invalid array variable argument")
 					p.syntaxOpaque(i)
@@ -839,10 +725,10 @@ func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd 
 				}
 			}
 		}
-		if n >= 2 && !p.commandRawTypeValid(knownValueNumeric, left, right) {
+		if n >= 2 && !analysis.CommandRawTypeValid(erabasic.KnownValueNumeric, left, right) {
 			p.truncateEdits(mark)
 			if directionKeyword && !fieldMayExpand {
-				if tokens, err := p.commandFieldTokens(left, right); err == nil && builtinScalarIndexesMissing(tokens, p.dialect) {
+				if tokens, err := analysis.CommandFieldTokens(left, right); err == nil && erabasic.BuiltinScalarIndexesMissing(tokens, analysis.Dialect) {
 					p.syntaxProblem(i, left, "scalar variable requires indexes")
 					p.syntaxOpaque(i)
 					return -1
@@ -858,8 +744,8 @@ func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd 
 		}
 		macroPrefix = macroPrefix || fieldMayExpand
 		if macroPrefix && n >= 2 {
-			tokens, err := p.lexSyntaxRange(left, right)
-			if err == nil && constantExpressionsValid(tokens) != nil {
+			tokens, err := analysis.LexSyntaxRange(left, right)
+			if err == nil && erabasic.ConstantExpressionsValid(tokens) != nil {
 				p.truncateEdits(mark)
 				p.syntaxOpaque(i)
 				return -1
@@ -878,78 +764,52 @@ func (p *formatter) syntaxRegisteredArraySort(i int, head []byte, base, wordEnd 
 		return -1
 	}
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
-	return trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+	p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
+	return erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 }
 
-func (p *formatter) registeredFieldValid(command string, index int, src []byte) bool {
-	switch command {
-	case "ARRAYREMOVE", "ARRAYSHIFT":
-		return index != 0 || p.isVariableArgument(src)
-	case "PRINTCPERLINE", "SAVENOS":
-		return p.isVariableArgument(src)
-	default:
-		return true
-	}
-}
-
-func (p *formatter) commandFieldMayExpand(left, right int) bool {
-	tokens, err := p.commandFieldTokens(left, right)
-	return err == nil && commandMacroPossibleForDialect(tokens, p.dialect)
-}
-
-func (p *formatter) commandRawTypeValid(expected knownValueType, left, right int) bool {
-	tokens, err := p.commandFieldTokens(left, right)
-	if err != nil || commandMacroPossibleForDialect(tokens, p.dialect) || setterMacroPossibleForDialect(tokens, p.dialect) {
-		return true
-	}
-	if builtinScalarIndexesMissing(tokens, p.dialect) {
-		return false
-	}
-	return commandTypeMatches(expected, knownExpressionTypeForDialect(tokens, p.dialect))
-}
-
-func (p *formatter) syntaxRegisteredSortChara(i int, head []byte, base, wordEnd int, spec registeredSpec) int {
+func (p *formatter) syntaxRegisteredSortChara(i int, head []byte, base, wordEnd int, spec erabasic.RegisteredSpec) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		p.setCodeEnd(i, base+wordEnd)
 		return base + wordEnd
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	if !p.expressionParseEnabled() {
-		codeEnd = trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+		codeEnd = erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 		p.setCodeEnd(i, codeEnd)
 		return codeEnd
 	}
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
-	parts, overflow := commandPrefixParts(p.src, parts, int(spec.max), int(spec.min), p.allowFullwidthSpace, true)
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, int(spec.Max), int(spec.Min), p.AllowFullwidthSpace, true)
 	macroPrefix := false
 	for n, field := range parts {
-		left := trimInputLeft(p.src, field.start, field.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, field.end, p.allowFullwidthSpace)
+		left := erabasic.TrimInputLeft(p.Src, field.Start, field.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, field.End, p.AllowFullwidthSpace)
 		if left == right {
 			p.truncateEdits(mark)
 			if p.expressionParseEnabled() {
-				p.syntaxProblem(i, field.start, "empty command argument")
+				p.syntaxProblem(i, field.Start, "empty command argument")
 			}
 			p.syntaxOpaque(i)
 			return -1
 		}
-		fieldMayExpand := p.commandFieldMayExpand(left, right)
-		if (n == len(parts)-1 || len(parts) == 1) && (commandFieldKeyword(p, left, right, "FORWARD") || commandFieldKeyword(p, left, right, "BACK")) {
+		fieldMayExpand := analysis.CommandFieldMayExpand(left, right)
+		if (n == len(parts)-1 || len(parts) == 1) && (analysis.CommandFieldKeyword(left, right, "FORWARD") || analysis.CommandFieldKeyword(left, right, "BACK")) {
 			continue
 		}
-		if len(parts) == 2 && n == 1 && !commandFieldKeyword(p, left, right, "FORWARD") && !commandFieldKeyword(p, left, right, "BACK") && !fieldMayExpand {
+		if len(parts) == 2 && n == 1 && !analysis.CommandFieldKeyword(left, right, "FORWARD") && !analysis.CommandFieldKeyword(left, right, "BACK") && !fieldMayExpand {
 			p.truncateEdits(mark)
 			if macroPrefix {
 				p.syntaxOpaque(i)
@@ -961,7 +821,7 @@ func (p *formatter) syntaxRegisteredSortChara(i int, head []byte, base, wordEnd 
 			p.syntaxOpaque(i)
 			return -1
 		}
-		if n == 0 && (len(parts) == 1 || len(parts) == 2) && !commandFieldVariableArgument(p, left, right) {
+		if n == 0 && (len(parts) == 1 || len(parts) == 2) && !analysis.CommandFieldVariableArgument(left, right) {
 			p.truncateEdits(mark)
 			if fieldMayExpand {
 				p.syntaxOpaque(i)
@@ -974,14 +834,14 @@ func (p *formatter) syntaxRegisteredSortChara(i int, head []byte, base, wordEnd 
 			return -1
 		}
 		if n == 0 {
-			if tokens, err := p.commandFieldTokens(left, right); err == nil && !commandMacroPossibleForDialect(tokens, p.dialect) {
-				if builtinVariableReadOnly(tokens, p.dialect) {
+			if tokens, err := analysis.CommandFieldTokens(left, right); err == nil && !erabasic.CommandMacroPossibleForDialect(tokens, analysis.Dialect) {
+				if erabasic.BuiltinVariableReadOnly(tokens, analysis.Dialect) {
 					p.truncateEdits(mark)
 					p.syntaxProblem(i, left, "SORTCHARA requires a mutable character variable")
 					p.syntaxOpaque(i)
 					return -1
 				}
-				if info, known := builtinVariableRoleInfo(tokens, p.dialect); known && !info.character {
+				if info, known := erabasic.BuiltinVariableRoleInfo(tokens, analysis.Dialect); known && !info.Character {
 					p.truncateEdits(mark)
 					p.syntaxProblem(i, left, "invalid SORTCHARA argument type")
 					p.syntaxOpaque(i)
@@ -989,8 +849,8 @@ func (p *formatter) syntaxRegisteredSortChara(i int, head []byte, base, wordEnd 
 				}
 			}
 		}
-		rawRoles := commandRoles{}
-		if !p.commandFieldTypeValid("SORTCHARA", n, left, right, &rawRoles) {
+		rawRoles := erabasic.CommandRoles{}
+		if !analysis.CommandFieldTypeValid("SORTCHARA", n, left, right, &rawRoles) {
 			p.truncateEdits(mark)
 			if macroPrefix || fieldMayExpand {
 				p.syntaxOpaque(i)
@@ -1014,34 +874,35 @@ func (p *formatter) syntaxRegisteredSortChara(i int, head []byte, base, wordEnd 
 		return -1
 	}
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
-	return trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+	p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
+	return erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 }
 
-func (p *formatter) syntaxRegisteredHTMLTagSplit(i int, head []byte, base, wordEnd int, spec registeredSpec) int {
+func (p *formatter) syntaxRegisteredHTMLTagSplit(i int, head []byte, base, wordEnd int, spec erabasic.RegisteredSpec) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
-	if !ok || !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
+	if !ok || !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, base+wordEnd, "missing HTML_TAGSPLIT argument")
 		}
 		p.syntaxOpaque(i)
 		return -1
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	if !p.expressionParseEnabled() {
-		codeEnd = trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
+		codeEnd = erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 		p.setCodeEnd(i, codeEnd)
 		return codeEnd
 	}
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
-	parts, overflow := commandPrefixParts(p.src, parts, int(spec.max), int(spec.min), p.allowFullwidthSpace, true)
-	if len(parts) < int(spec.min) {
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, int(spec.Max), int(spec.Min), p.AllowFullwidthSpace, true)
+	if len(parts) < int(spec.Min) {
 		if p.expressionParseEnabled() {
 			p.syntaxProblem(i, base+start, "HTML_TAGSPLIT expects one to three arguments")
 		}
@@ -1050,8 +911,8 @@ func (p *formatter) syntaxRegisteredHTMLTagSplit(i int, head []byte, base, wordE
 	}
 	macroPrefix := false
 	for n, field := range parts {
-		left := trimInputLeft(p.src, field.start, field.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, field.end, p.allowFullwidthSpace)
+		left := erabasic.TrimInputLeft(p.Src, field.Start, field.End, p.AllowFullwidthSpace)
+		right := erabasic.TrimInputRight(p.Src, left, field.End, p.AllowFullwidthSpace)
 		if left == right {
 			p.truncateEdits(mark)
 			if p.expressionParseEnabled() {
@@ -1060,8 +921,8 @@ func (p *formatter) syntaxRegisteredHTMLTagSplit(i int, head []byte, base, wordE
 			p.syntaxOpaque(i)
 			return -1
 		}
-		fieldMayExpand := p.commandFieldMayExpand(left, right)
-		if n > 0 && !commandFieldVariableArgument(p, left, right) {
+		fieldMayExpand := analysis.CommandFieldMayExpand(left, right)
+		if n > 0 && !analysis.CommandFieldVariableArgument(left, right) {
 			p.truncateEdits(mark)
 			if macroPrefix || fieldMayExpand {
 				p.syntaxOpaque(i)
@@ -1073,8 +934,8 @@ func (p *formatter) syntaxRegisteredHTMLTagSplit(i int, head []byte, base, wordE
 			p.syntaxOpaque(i)
 			return -1
 		}
-		rawRoles := commandRoles{}
-		if !p.commandFieldTypeValid("HTML_TAGSPLIT", n, left, right, &rawRoles) {
+		rawRoles := erabasic.CommandRoles{}
+		if !analysis.CommandFieldTypeValid("HTML_TAGSPLIT", n, left, right, &rawRoles) {
 			p.truncateEdits(mark)
 			if macroPrefix || fieldMayExpand {
 				p.syntaxOpaque(i)
@@ -1098,70 +959,24 @@ func (p *formatter) syntaxRegisteredHTMLTagSplit(i int, head []byte, base, wordE
 		return -1
 	}
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
-	return trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace)
-}
-
-func registeredCodeEnd(base, end, comment int) int {
-	if comment >= 0 {
-		return base + comment
-	}
-	return base + end
-}
-
-func registeredBodyWithSpace(head []byte, wordEnd int, allowFullwidthSpace bool, sessions ...*expressionSession) (start, end, comment int, ok bool) {
-	if wordEnd >= len(head) {
-		return wordEnd, wordEnd, -1, true
-	}
-	if head[wordEnd] == ';' {
-		return 0, 0, -1, false
-	}
-	if !inputSpaceAt(head, wordEnd, allowFullwidthSpace) {
-		return 0, 0, -1, false
-	}
-	start = wordEnd + inputSpaceSize(head, wordEnd, allowFullwidthSpace)
-	end, found := syntaxCommentEnd(head, start, len(head), sessions...)
-	if !found {
-		return start, end, -1, true
-	}
-	return start, end, end, true
-}
-
-func registeredRawBodyWithSpace(head []byte, wordEnd int, allowFullwidthSpace bool) (start, end int, ok bool) {
-	if wordEnd >= len(head) {
-		return wordEnd, wordEnd, true
-	}
-	if !inputSpaceAt(head, wordEnd, allowFullwidthSpace) && head[wordEnd] != ';' {
-		return 0, 0, false
-	}
-	return wordEnd + max(1, inputSpaceSize(head, wordEnd, allowFullwidthSpace)), len(head), true
-}
-
-func registeredFormAnyBody(head []byte, wordEnd int, allowFullwidthSpace bool) (start, end int, ok bool) {
-	start, end, ok = registeredRawBodyWithSpace(head, wordEnd, allowFullwidthSpace)
-	if !ok {
-		return 0, 0, false
-	}
-	for start < len(head) && head[start] == ' ' {
-		start++
-	}
-	return start, end, true
+	p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
+	return erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace)
 }
 
 func (p *formatter) syntaxRegisteredCommaGap(i, comma, end, leftBound int) {
 	if !p.rules[CommaSpacing] {
 		return
 	}
-	left := trimInputRight(p.src, leftBound, comma, p.allowFullwidthSpace)
-	right := trimInputLeft(p.src, comma+1, end, p.allowFullwidthSpace)
-	if mandatoryInlineMarker(p.src[:left], left-3) {
+	left := erabasic.TrimInputRight(p.Src, leftBound, comma, p.AllowFullwidthSpace)
+	right := erabasic.TrimInputLeft(p.Src, comma+1, end, p.AllowFullwidthSpace)
+	if erabasic.MandatoryInlineMarker(p.Src[:left], left-3) {
 		left = comma
 	}
-	if mandatoryInlineMarker(p.src, right) {
+	if erabasic.MandatoryInlineMarker(p.Src, right) {
 		p.addEdit(i, left, comma, nil, CommaSpacing)
 		return
 	}
-	if right < end && p.src[right] != ',' && p.src[right] != ')' && p.src[right] != ']' {
+	if right < end && p.Src[right] != ',' && p.Src[right] != ')' && p.Src[right] != ']' {
 		p.addEdit(i, left, right, []byte{',', ' '}, CommaSpacing)
 	} else if left < comma {
 		p.addEdit(i, left, comma, nil, CommaSpacing)
@@ -1172,24 +987,24 @@ func (p *formatter) syntaxRegisteredCommandGap(i int, head []byte, base, wordEnd
 	if !p.rules[CommandSpacing] {
 		return
 	}
-	first := trimInputLeft(head, start, end, p.allowFullwidthSpace)
+	first := erabasic.TrimInputLeft(head, start, end, p.AllowFullwidthSpace)
 	if first < end && head[first] != ';' && head[first] != ',' {
 		p.addEdit(i, base+wordEnd, base+first, []byte{' '}, CommandSpacing)
 	}
 }
 
-func (p *formatter) syntaxRegisteredCommaGaps(i int, parts []syntaxSpan, end int) {
+func (p *formatter) syntaxRegisteredCommaGaps(i int, parts []erabasic.SyntaxSpan, end int) {
 	for n := 0; n+1 < len(parts); n++ {
-		comma := parts[n].end
-		for comma < parts[n+1].start && p.src[comma] != ',' {
+		comma := parts[n].End
+		for comma < parts[n+1].Start && p.Src[comma] != ',' {
 			comma++
 		}
-		if comma >= parts[n+1].start || p.src[comma] != ',' {
+		if comma >= parts[n+1].Start || p.Src[comma] != ',' {
 			continue
 		}
-		leftBound := parts[n].start
-		fieldLeft := trimInputLeft(p.src, parts[n].start, parts[n].end, p.allowFullwidthSpace)
-		fieldRight := trimInputRight(p.src, fieldLeft, parts[n].end, p.allowFullwidthSpace)
+		leftBound := parts[n].Start
+		fieldLeft := erabasic.TrimInputLeft(p.Src, parts[n].Start, parts[n].End, p.AllowFullwidthSpace)
+		fieldRight := erabasic.TrimInputRight(p.Src, fieldLeft, parts[n].End, p.AllowFullwidthSpace)
 		if fieldLeft >= fieldRight {
 			leftBound = comma
 		}
@@ -1197,15 +1012,6 @@ func (p *formatter) syntaxRegisteredCommaGaps(i int, parts []syntaxSpan, end int
 	}
 }
 
-func registeredHasArgumentWithSpace(head []byte, start, end int, allowFullwidthSpace bool) bool {
-	return start < end && trimInputLeft(head, start, end, allowFullwidthSpace) < trimInputRight(head, start, end, allowFullwidthSpace)
-}
-
-func (p *formatter) isVariableArgument(src []byte) bool {
-	src = trimInput(src, p.allowFullwidthSpace)
-	if bytes.Contains(src, []byte("[[")) {
-		return true
-	}
-	tokens, err := p.newExpressionSession(src).lexRange(expressionSourceOriginal, 0, len(src), 0)
-	return err == nil && variableArgumentShape(tokens)
+func (p *formatter) ignoredCommandArguments(i, offset int, command string) {
+	p.warning(i, offset, "ignored_arguments", command+" has runtime-ignored arguments")
 }

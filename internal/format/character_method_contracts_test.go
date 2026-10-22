@@ -3,29 +3,25 @@ package format
 import (
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func characterMethodResult(line string) Result {
 	return FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, Options{Dialect: CommonDialect})
 }
 
-func characterMethodDialectResult(dialect Dialect, line string) Result {
-	return FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, Options{Dialect: dialect})
+func characterMethodDialectResult(dialect erabasic.Dialect, line string) Result {
+	return FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, Options{Dialect: Dialect(dialect)})
 }
 
 func TestCharacterMethodCSVContracts(t *testing.T) {
-	for _, line := range []string{
-		"CSVNAME 1", "CSVNAME 1,", "CSVNAME 1,,", "CSVNAME RESULT:0", "CSVNAME ITEMPRICE",
-		"CSVCSTR 1,2", "CSVCSTR 1,2,,", "CSVBASE 1,2,3", "EXISTCSV 1,2",
-	} {
+	for _, line := range []string{"CSVNAME 1", "CSVNAME 1,", "CSVNAME 1,,", "CSVNAME RESULT:0", "CSVNAME ITEMPRICE", "CSVCSTR 1,2", "CSVCSTR 1,2,,", "CSVBASE 1,2,3", "EXISTCSV 1,2"} {
 		if r := characterMethodResult(line); len(r.Diagnostics) != 0 {
 			t.Errorf("valid %q: %+v", line, r.Diagnostics)
 		}
 	}
-	for _, line := range []string{
-		"CSVNAME", "CSVNAME 1,2,3", `CSVNAME "x"`, "CSVCSTR 1", "CSVCSTR 1,,2",
-		"CSVBASE 1,2,3,4", `EXISTCSV "x"`, "EXISTCSV 1,2,3",
-	} {
+	for _, line := range []string{"CSVNAME", "CSVNAME 1,2,3", `CSVNAME "x"`, "CSVCSTR 1", "CSVCSTR 1,,2", "CSVBASE 1,2,3,4", `EXISTCSV "x"`, "EXISTCSV 1,2,3"} {
 		if r := characterMethodResult(line); len(r.Diagnostics) != 1 || !strings.Contains(r.Diagnostics[0].Message, "method") {
 			t.Errorf("invalid %q: %+v", line, r.Diagnostics)
 		}
@@ -33,19 +29,12 @@ func TestCharacterMethodCSVContracts(t *testing.T) {
 }
 
 func TestCharacterMethodFindCharaContracts(t *testing.T) {
-	for _, line := range []string{
-		"FINDCHARA CFLAG,1", "FINDCHARA CFLAG,1,,,", "FINDCHARA CFLAG,1,,RESULT",
-		`FINDCHARA NAME,"x"`, "FINDCHARA CSTR,CSTR", "FINDLASTCHARA CFLAG,CFLAG",
-		"FINDCHARA UNKNOWN,UNKNOWN",
-	} {
+	for _, line := range []string{"FINDCHARA CFLAG,1", "FINDCHARA CFLAG,1,,,", "FINDCHARA CFLAG,1,,RESULT", `FINDCHARA NAME,"x"`, "FINDCHARA CSTR,CSTR", "FINDLASTCHARA CFLAG,CFLAG", "FINDCHARA UNKNOWN,UNKNOWN"} {
 		if r := characterMethodResult(line); len(r.Diagnostics) != 0 {
 			t.Errorf("valid/deferred %q: %+v", line, r.Diagnostics)
 		}
 	}
-	for _, line := range []string{
-		"FINDCHARA", "FINDCHARA CFLAG", "FINDCHARA CFLAG,,,,", "FINDCHARA RESULT,1",
-		"FINDCHARA CFLAG,CSTR", `FINDCHARA CFLAG,1,"x"`, "FINDCHARA DA,1",
-	} {
+	for _, line := range []string{"FINDCHARA", "FINDCHARA CFLAG", "FINDCHARA CFLAG,,,,", "FINDCHARA RESULT,1", "FINDCHARA CFLAG,CSTR", `FINDCHARA CFLAG,1,"x"`, "FINDCHARA DA,1"} {
 		if r := characterMethodResult(line); len(r.Diagnostics) != 1 || !strings.Contains(r.Diagnostics[0].Message, "method") {
 			t.Errorf("invalid %q: %+v", line, r.Diagnostics)
 		}
@@ -67,11 +56,17 @@ func TestCharacterMethodFindCharadataContract(t *testing.T) {
 
 func TestCharacterMethodContractsDeferDynamicTails(t *testing.T) {
 	for _, line := range []string{
-		`CSVNAME UNKNOWN,UNKNOWN`, `CSVNAME 1,UNKNOWN`, `CSVCSTR 1,UNKNOWN,UNKNOWN`,
-		`FINDCHARA UNKNOWN,UNKNOWN`, `FINDCHARA CFLAG,UNKNOWN,UNKNOWN`,
-		`CSVNAME ;!; 1,2,3`, `FINDCHARA ;!; RESULT,1`,
-		`CSVNAME F(1),F(2)`, `FINDCHARA F(1),F(2),F(3)`,
-		`CSVNAME @"raw",1`, `FINDCHARA @"raw",1`,
+		`CSVNAME UNKNOWN,UNKNOWN`,
+		`CSVNAME 1,UNKNOWN`,
+		`CSVCSTR 1,UNKNOWN,UNKNOWN`,
+		`FINDCHARA UNKNOWN,UNKNOWN`,
+		`FINDCHARA CFLAG,UNKNOWN,UNKNOWN`,
+		`CSVNAME ;!; 1,2,3`,
+		`FINDCHARA ;!; RESULT,1`,
+		`CSVNAME F(1),F(2)`,
+		`FINDCHARA F(1),F(2),F(3)`,
+		`CSVNAME @"raw",1`,
+		`FINDCHARA @"raw",1`,
 	} {
 		r := characterMethodResult(line)
 		if len(r.Diagnostics) != 0 {
@@ -85,7 +80,7 @@ func TestCharacterMethodContractsDeferDynamicTails(t *testing.T) {
 }
 
 func TestCharacterMethodContractsAllDialects(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, line := range []string{"CSVNAME 1", "CSVBASE 1,2", "FINDCHARA CFLAG,1", "FIND_CHARADATA", "FIND_CHARADATA \"x\""} {
 			if r := characterMethodDialectResult(dialect, line); len(r.Diagnostics) != 0 {
 				t.Errorf("dialect=%v valid %q: %+v", dialect, line, r.Diagnostics)

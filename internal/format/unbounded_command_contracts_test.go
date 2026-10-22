@@ -2,35 +2,8 @@ package format
 
 import (
 	"bytes"
-	"strconv"
-	"strings"
 	"testing"
 )
-
-func commandNumericFields(count int) string {
-	var b strings.Builder
-	for i := 1; i <= count; i++ {
-		if i > 1 {
-			b.WriteByte(',')
-		}
-		b.WriteString(strconv.Itoa(i))
-	}
-	return b.String()
-}
-
-func saveCharaFields(count int, invalidLast bool) string {
-	var b strings.Builder
-	b.WriteString(`"file","message"`)
-	for i := 3; i <= count; i++ {
-		b.WriteByte(',')
-		if invalidLast && i == count {
-			b.WriteString("1+(")
-			continue
-		}
-		b.WriteString(strconv.Itoa(i - 2))
-	}
-	return b.String()
-}
 
 func TestCharacterListCommandsValidateArgumentsBeyondLegacyLimit(t *testing.T) {
 	commands := []string{"ADDCHARA", "ADDSPCHARA", "ADDCOPYCHARA", "PICKUPCHARA", "DELCHARA"}
@@ -41,14 +14,12 @@ func TestCharacterListCommandsValidateArgumentsBeyondLegacyLimit(t *testing.T) {
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("%s valid tail: diagnostics=%+v output=%q", command, r.Diagnostics, r.Output)
 		}
-
 		invalid := []byte("@F\n" + command + " " + commandNumericFields(255) + ",1+(\n")
 		r = FormatWithOptions(invalid, ERB, options)
 		if !bytes.Equal(r.Output, invalid) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("%s invalid tail: output=%q diagnostics=%+v", command, r.Output, r.Diagnostics)
 		}
 	}
-
 	validSave := []byte("@F\nSAVECHARA " + saveCharaFields(256, false) + "\n")
 	r := FormatWithOptions(validSave, ERB, options)
 	if len(r.Diagnostics) != 0 {
@@ -76,12 +47,7 @@ func TestDTColumnOptionsAcceptsOneTerminalComma(t *testing.T) {
 	if len(r.Diagnostics) != 0 || !bytes.Contains(r.Output, []byte("DT_COLUMN_OPTIONS DT, COL, DEFAULT, 1 + 2,")) {
 		t.Fatalf("valid output=%q diagnostics=%+v", r.Output, r.Diagnostics)
 	}
-	for _, body := range []string{
-		"DT_COLUMN_OPTIONS DT,COL,DEFAULT,",
-		"DT_COLUMN_OPTIONS DT,COL,DEFAULT,,",
-		"DT_COLUMN_OPTIONS DT,COL,,1,",
-		"DT_COLUMN_OPTIONS DT,COL,DEFAULT,1,,",
-	} {
+	for _, body := range []string{"DT_COLUMN_OPTIONS DT,COL,DEFAULT,", "DT_COLUMN_OPTIONS DT,COL,DEFAULT,,", "DT_COLUMN_OPTIONS DT,COL,,1,", "DT_COLUMN_OPTIONS DT,COL,DEFAULT,1,,"} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {

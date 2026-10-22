@@ -3,8 +3,9 @@ package format
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func allFormRules(t *testing.T) ruleSet {
@@ -17,7 +18,7 @@ func allFormRules(t *testing.T) ruleSet {
 	return rules
 }
 
-func applyForm(t *testing.T, input string, mode formMode) string {
+func applyForm(t *testing.T, input string, mode erabasic.FormMode) string {
 	t.Helper()
 	rules := allFormRules(t)
 	edits, err := formEdits([]byte(input), rules, mode)
@@ -28,25 +29,19 @@ func applyForm(t *testing.T, input string, mode formMode) string {
 }
 
 func TestFormEditsLineAndQuoted(t *testing.T) {
-	if got, want := applyForm(t, `text { A+B, 6, RIGHT } % F( A , -1 ) %`, formLine), `text {A + B, 6, RIGHT} %F(A, -1)%`; got != want {
+	if got, want := applyForm(t, `text { A+B, 6, RIGHT } % F( A , -1 ) %`, erabasic.FormLine), `text {A + B, 6, RIGHT} %F(A, -1)%`; got != want {
 		t.Fatalf("line FORM = %q, want %q", got, want)
 	}
-	if got, want := applyForm(t, `@"text { A+B }"`, formQuoted), `@"text {A + B}"`; got != want {
+	if got, want := applyForm(t, `@"text { A+B }"`, erabasic.FormQuoted), `@"text {A + B}"`; got != want {
 		t.Fatalf("quoted FORM = %q, want %q", got, want)
 	}
 }
 
 func TestFormPlaceholderFieldShape(t *testing.T) {
 	rules := allFormRules(t)
-	valid := map[string]string{
-		`{1,}`:                `{1,}`,
-		`{1,2,}`:              `{1, 2,}`,
-		`{1,2,EFAUDIT_ALIGN}`: `{1, 2, EFAUDIT_ALIGN}`,
-		`{F(1,2),3,RIGHT}`:    `{F(1, 2), 3, RIGHT}`,
-		`{1,2,F(1,2)}`:        `{1, 2, F(1, 2)}`,
-	}
+	valid := map[string]string{`{1,}`: `{1,}`, `{1,2,}`: `{1, 2,}`, `{1,2,EFAUDIT_ALIGN}`: `{1, 2, EFAUDIT_ALIGN}`, `{F(1,2),3,RIGHT}`: `{F(1, 2), 3, RIGHT}`, `{1,2,F(1,2)}`: `{1, 2, F(1, 2)}`}
 	for input, want := range valid {
-		edits, err := formEdits([]byte(input), rules, formLine)
+		edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 		if err != nil {
 			t.Fatalf("valid FORM %q: %v", input, err)
 		}
@@ -54,18 +49,16 @@ func TestFormPlaceholderFieldShape(t *testing.T) {
 			t.Fatalf("valid FORM %q changed to %q, want %q", input, got, want)
 		}
 	}
-
 	input := `x {1,2,RIGHT,4} % RESULTS+CSTR %`
-	edits, err := formEdits([]byte(input), rules, formLine)
+	edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 	if err == nil {
 		t.Fatal("too many FORM fields were accepted")
 	}
 	if got, want := string(applyEdits([]byte(input), edits)), `x {1,2,RIGHT,4} %RESULTS + CSTR%`; got != want {
 		t.Fatalf("partial FORM output = %q, want %q", got, want)
 	}
-
 	input = `x {1,,RIGHT} % RESULTS+CSTR %`
-	edits, err = formEdits([]byte(input), rules, formLine)
+	edits, err = formEdits([]byte(input), rules, erabasic.FormLine)
 	if err == nil {
 		t.Fatal("empty FORM width was accepted")
 	}
@@ -74,7 +67,7 @@ func TestFormPlaceholderFieldShape(t *testing.T) {
 	}
 	for _, alignment := range []string{`0`, `"LEFT"`, `@"LEFT"`, `(RIGHT)`, `\@1?LEFT#RIGHT\@`} {
 		input := `x {1,2,` + alignment + `} % RESULTS+CSTR %`
-		edits, err := formEdits([]byte(input), rules, formLine)
+		edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 		want := `x {1,2,` + alignment + `} %RESULTS + CSTR%`
 		if err == nil || string(applyEdits([]byte(input), edits)) != want {
 			t.Fatalf("literal alignment %q: edits=%+v error=%v", alignment, edits, err)
@@ -85,12 +78,12 @@ func TestFormPlaceholderFieldShape(t *testing.T) {
 func TestFormEditsConditionalNestedAndEscaped(t *testing.T) {
 	input := `\@ A+1 ? left \# { B+2 } # right \@`
 	want := `\@ A + 1 ? left \# {B + 2} # right \@`
-	if got := applyForm(t, input, formLine); got != want {
+	if got := applyForm(t, input, erabasic.FormLine); got != want {
 		t.Fatalf("conditional FORM = %q, want %q", got, want)
 	}
 	input = `*** { A+B } +++ \{literal\}`
 	want = `*** {A + B} +++ \{literal\}`
-	if got := applyForm(t, input, formLine); got != want {
+	if got := applyForm(t, input, erabasic.FormLine); got != want {
 		t.Fatalf("escaped/triple FORM = %q, want %q", got, want)
 	}
 }
@@ -103,12 +96,8 @@ func TestFormConditionalModeAndSpacing(t *testing.T) {
 	for _, test := range []struct {
 		input string
 		want  string
-	}{
-		{`\@A+1?yes#no\@`, `\@ A + 1 ?yes#no\@`},
-		{`\@  A + 1  ?  yes  \@`, `\@ A + 1 ?  yes  \@`},
-		{`\@A?yes#right  \@`, `\@ A ?yes#right  \@`},
-	} {
-		edits, err := formEdits([]byte(test.input), rules, formConditional)
+	}{{`\@A+1?yes#no\@`, `\@ A + 1 ?yes#no\@`}, {`\@  A + 1  ?  yes  \@`, `\@ A + 1 ?  yes  \@`}, {`\@A?yes#right  \@`, `\@ A ?yes#right  \@`}} {
+		edits, err := formEdits([]byte(test.input), rules, erabasic.FormConditional)
 		if err != nil {
 			t.Fatalf("formEdits(%q): %v", test.input, err)
 		}
@@ -116,14 +105,13 @@ func TestFormConditionalModeAndSpacing(t *testing.T) {
 			t.Fatalf("conditional FORM = %q, want %q", got, test.want)
 		}
 	}
-
 	input := `\@A?yes  \@`
-	fingerprint, err := formFingerprintMode([]byte(input), formConditional)
+	fingerprint, err := formFingerprintMode([]byte(input), erabasic.FormConditional)
 	if err != nil {
 		t.Fatal(err)
 	}
 	formatted := `\@ A ?yes  \@`
-	compact, err := formFingerprintMode([]byte(formatted), formConditional)
+	compact, err := formFingerprintMode([]byte(formatted), erabasic.FormConditional)
 	if err != nil || !bytes.Equal(fingerprint, compact) {
 		t.Fatalf("conditional fingerprint changed with condition trivia: %q vs %q", fingerprint, compact)
 	}
@@ -131,18 +119,18 @@ func TestFormConditionalModeAndSpacing(t *testing.T) {
 
 func TestFormModesAndFullWidthLiteral(t *testing.T) {
 	call := `name { A+1 }(ARG, next`
-	end, err := scanForm([]byte(call), formCall)
+	end, err := erabasic.ScanForm([]byte(call), erabasic.FormCall)
 	if err != nil || string([]byte(call)[:end]) != `name { A+1 }` {
 		t.Fatalf("scanForm(call) = %d, %v", end, err)
 	}
 	comma := `name { A+1 }, next`
-	end, err = scanForm([]byte(comma), formComma)
+	end, err = erabasic.ScanForm([]byte(comma), erabasic.FormComma)
 	if err != nil || string([]byte(comma)[:end]) != `name { A+1 }` {
 		t.Fatalf("scanForm(comma) = %d, %v", end, err)
 	}
 	input := "literal　{ A+B }"
 	want := "literal　{A + B}"
-	if got := applyForm(t, input, formLine); got != want {
+	if got := applyForm(t, input, erabasic.FormLine); got != want {
 		t.Fatalf("full-width FORM literal = %q, want %q", got, want)
 	}
 }
@@ -194,7 +182,7 @@ func TestExpressionFormAtomEditsNestedAndPaddingOnly(t *testing.T) {
 func TestFormIslandErrorAfterConfirmedIslands(t *testing.T) {
 	rules := allFormRules(t)
 	input := `x { A+B } % A+@ % { C+D }`
-	edits, err := formEdits([]byte(input), rules, formLine)
+	edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 	if err == nil {
 		t.Fatal("formEdits returned nil error for invalid middle island")
 	}
@@ -202,9 +190,8 @@ func TestFormIslandErrorAfterConfirmedIslands(t *testing.T) {
 	if got != `x {A + B} % A+@ % {C + D}` {
 		t.Fatalf("confirmed islands = %q", got)
 	}
-
 	input = `x { A+B } % A+@`
-	edits, err = formEdits([]byte(input), rules, formLine)
+	edits, err = formEdits([]byte(input), rules, erabasic.FormLine)
 	if err == nil {
 		t.Fatal("formEdits returned nil error for unclosed container")
 	}
@@ -215,7 +202,7 @@ func TestFormIslandErrorAfterConfirmedIslands(t *testing.T) {
 
 func TestFormErrorsPreserveInput(t *testing.T) {
 	for _, input := range []string{`x { A+1`, `x {   }`, `x % A+1`, `x %   %`, `\@A+1?left#right`, `\@A?left\@B?x#y\@#right\@`} {
-		edits, err := formEdits([]byte(input), allFormRules(t), formLine)
+		edits, err := formEdits([]byte(input), allFormRules(t), erabasic.FormLine)
 		if err == nil {
 			t.Fatalf("formEdits(%q) returned nil error", input)
 		}
@@ -228,12 +215,12 @@ func TestFormErrorsPreserveInput(t *testing.T) {
 func TestFormEditsIdempotent(t *testing.T) {
 	rules := allFormRules(t)
 	input := []byte(`@"x {  A+B  } % F( A,-1 ) %"`)
-	first, err := formEdits(input, rules, formQuoted)
+	first, err := formEdits(input, rules, erabasic.FormQuoted)
 	if err != nil {
 		t.Fatal(err)
 	}
 	formatted := applyEdits(input, first)
-	second, err := formEdits(formatted, rules, formQuoted)
+	second, err := formEdits(formatted, rules, erabasic.FormQuoted)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +249,7 @@ func TestNestedFormErrorPosition(t *testing.T) {
 func TestFormMandatoryInlineMarkerPreservesOnlyAffectedIsland(t *testing.T) {
 	rules := allFormRules(t)
 	input := `x {  A ;!; B  } % RESULTS+CSTR %`
-	edits, err := formEdits([]byte(input), rules, formLine)
+	edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,14 +261,13 @@ func TestFormMandatoryInlineMarkerPreservesOnlyAffectedIsland(t *testing.T) {
 func TestFormMandatoryInlineMarkerWorksInConditionalAndFingerprint(t *testing.T) {
 	rules := allFormRules(t)
 	input := `x \@  A ;!; B  ? yes # no \@ { C+D }`
-	edits, err := formEdits([]byte(input), rules, formLine)
+	edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := string(applyEdits([]byte(input), edits)), `x \@  A ;!; B  ? yes # no \@ {C + D}`; got != want {
 		t.Fatalf("conditional marker output = %q, want %q", got, want)
 	}
-
 	withPadding, err := formFingerprint([]byte(`@"x {  A ;!; B  }"`))
 	if err != nil {
 		t.Fatal(err)
@@ -295,61 +281,6 @@ func TestFormMandatoryInlineMarkerWorksInConditionalAndFingerprint(t *testing.T)
 	}
 	if _, err := formFingerprint([]byte(`@"x { A + @"nested { B ;!; C }" }"`)); err != nil {
 		t.Fatalf("nested marker FORM fingerprint: %v", err)
-	}
-}
-
-func TestExpressionSessionBoundsAndSourceIsolation(t *testing.T) {
-	src := []byte(`@"x { A+B }" trailing`)
-	session := newExpressionSession(src)
-	limit := strings.Index(string(src), " trailing")
-	end, err := session.scanFormAt(expressionSourceOriginal, 0, limit, formQuoted)
-	if err != nil || end != limit {
-		t.Fatalf("bounded scan = %d, %v; want %d", end, err, limit)
-	}
-	largerEnd, err := session.scanFormAt(expressionSourceOriginal, 0, len(src), formQuoted)
-	if err != nil || largerEnd != limit || len(session.scans) != 1 {
-		t.Fatalf("explicit scan reuse = %d, %v, cache size %d", largerEnd, err, len(session.scans))
-	}
-	wide := newExpressionSession(src)
-	if end, err := wide.scanFormAt(expressionSourceOriginal, 0, len(src), formQuoted); err != nil || end != limit {
-		t.Fatalf("wide scan = %d, %v; want %d", end, err, limit)
-	}
-	if end, err := wide.scanFormAt(expressionSourceOriginal, 0, limit, formQuoted); err != nil || end != limit || len(wide.scans) != 1 {
-		t.Fatalf("narrow explicit reuse = %d, %v, cache size %d", end, err, len(wide.scans))
-	}
-	if _, err := session.scanFormAt(expressionSourceOriginal, 0, 3, formQuoted); err == nil {
-		t.Fatal("bounded scan accepted an unterminated FORM")
-	}
-
-	first, err := session.formFingerprintAt(expressionSourceOriginal, 0, limit, formQuoted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	session.setSource(expressionSourceFormatted, []byte(`@"x { A+B }"`))
-	second, err := session.formFingerprintAt(expressionSourceFormatted, 0, len(session.sources[expressionSourceFormatted]), formQuoted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(first, second) {
-		t.Fatalf("trivia-only source changed fingerprint: %q vs %q", first, second)
-	}
-	session.setSource(expressionSourceFormatted, []byte(`@"x { A ;!; B }"`))
-	third, err := session.formFingerprintAt(expressionSourceFormatted, 0, len(session.sources[expressionSourceFormatted]), formQuoted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Equal(second, third) {
-		t.Fatal("formatted source reused a stale fingerprint")
-	}
-}
-
-func TestExpressionSessionAliasIndexOverlaps(t *testing.T) {
-	session := newExpressionSession([]byte(`[[[`))
-	if !session.hasAlias(expressionSourceOriginal, 1, 3) {
-		t.Fatal("overlapping alias marker was not indexed")
-	}
-	if session.hasAlias(expressionSourceOriginal, 2, 3) {
-		t.Fatal("partial alias marker was reported")
 	}
 }
 

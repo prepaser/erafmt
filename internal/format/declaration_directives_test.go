@@ -3,26 +3,28 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestDeclarationDirectiveBoundaries(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		kind Kind
+		kind erabasic.Kind
 		src  string
 		code string
-		sev  Severity
+		sev  erabasic.Severity
 	}{
-		{"bare dim", ERB, "@F\n#DIM\nRETURN 0\n", "unsupported_syntax", Unsupported},
-		{"bare dims", ERH, "#DIMS\n", "unsupported_syntax", Unsupported},
-		{"bare const", ERB, "@F\n#DIM CONST\nRETURN 0\n", "unsupported_syntax", Unsupported},
-		{"bare ref", ERB, "@F\n#DIM REF\nRETURN 0\n", "unsupported_syntax", Unsupported},
-		{"bare localsize", ERB, "@F\n#LOCALSIZE\nRETURN 0\n", "missing_local_size", Warning},
-		{"bare localssize", ERB, "@F\n#LOCALSSIZE\nRETURN 0\n", "missing_local_size", Warning},
+		{"bare dim", erabasic.ERB, "@F\n#DIM\nRETURN 0\n", "unsupported_syntax", erabasic.Unsupported},
+		{"bare dims", erabasic.ERH, "#DIMS\n", "unsupported_syntax", erabasic.Unsupported},
+		{"bare const", erabasic.ERB, "@F\n#DIM CONST\nRETURN 0\n", "unsupported_syntax", erabasic.Unsupported},
+		{"bare ref", erabasic.ERB, "@F\n#DIM REF\nRETURN 0\n", "unsupported_syntax", erabasic.Unsupported},
+		{"bare localsize", erabasic.ERB, "@F\n#LOCALSIZE\nRETURN 0\n", "missing_local_size", erabasic.Warning},
+		{"bare localssize", erabasic.ERB, "@F\n#LOCALSSIZE\nRETURN 0\n", "missing_local_size", erabasic.Warning},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := FormatWithOptions([]byte(tc.src), tc.kind, Options{})
-			if len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != tc.code || r.Diagnostics[0].Severity != tc.sev {
+			r := FormatWithOptions([]byte(tc.src), Kind(tc.kind), Options{})
+			if len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != tc.code || r.Diagnostics[0].Severity != Severity(tc.sev) {
 				t.Fatalf("diagnostics=%+v output=%q", r.Diagnostics, r.Output)
 			}
 		})
@@ -105,7 +107,6 @@ func TestPrivateDeclarationsDeferBMPDigitLeadingMacroNames(t *testing.T) {
 			}
 		}
 	}
-
 	for _, name := range []string{"1A", "2"} {
 		src := "@F\n#DIM " + name + ",1+2\nRETURN 1+2\n"
 		result := FormatWithOptions([]byte(src), ERB, Options{})
@@ -113,7 +114,6 @@ func TestPrivateDeclarationsDeferBMPDigitLeadingMacroNames(t *testing.T) {
 			t.Fatalf("ASCII name=%q output=%q diagnostics=%+v", name, result.Output, result.Diagnostics)
 		}
 	}
-
 	for _, name := range []string{"１２A", "١A", "𝟙A"} {
 		for _, directive := range []string{"#DIM", "#DIMS"} {
 			src := directive + " " + name + ",1+2\n"
@@ -123,7 +123,6 @@ func TestPrivateDeclarationsDeferBMPDigitLeadingMacroNames(t *testing.T) {
 			}
 		}
 	}
-
 	result := FormatWithOptions([]byte("@F\n#DIM CONST １２A,1+2\nRETURN 0\n"), ERB, Options{})
 	if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("#DIM CONST １２A,1+2")) {
 		t.Fatalf("modifier output=%q diagnostics=%+v", result.Output, result.Diagnostics)
@@ -131,10 +130,7 @@ func TestPrivateDeclarationsDeferBMPDigitLeadingMacroNames(t *testing.T) {
 }
 
 func TestPrivateDigitLeadingDeclarationDefersUnknownContexts(t *testing.T) {
-	for _, src := range []string{
-		"@F\n[IF FLAG]\n#DIM １２A,1+2\n[ENDIF]\nRETURN 1+2\n",
-		"@F\n? #DIM １２A,1+2\nRETURN 1+2\n",
-	} {
+	for _, src := range []string{"@F\n[IF FLAG]\n#DIM １２A,1+2\n[ENDIF]\nRETURN 1+2\n", "@F\n? #DIM １２A,1+2\nRETURN 1+2\n"} {
 		result := FormatWithOptions([]byte(src), ERB, Options{})
 		if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("#DIM １２A, 1 + 2")) && !bytes.Contains(result.Output, []byte("#DIM １２A,1+2")) {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
@@ -195,12 +191,12 @@ func TestRejectedOrUnresolvedDeclarationDoesNotPoisonDuplicateState(t *testing.T
 		`#DIMS VALUE,1="x" * 10000`,
 		`#DIMS VALUE,1="x" * (1/0)`,
 	} {
-		for _, kind := range []Kind{ERB, ERH} {
+		for _, kind := range []erabasic.Kind{erabasic.ERB, erabasic.ERH} {
 			src := first + "\n#DIM VALUE,1\n"
-			if kind == ERB {
+			if kind == erabasic.ERB {
 				src = "@F\n" + src
 			}
-			r := FormatWithOptions([]byte(src), kind, Options{})
+			r := FormatWithOptions([]byte(src), Kind(kind), Options{})
 			for _, d := range r.Diagnostics {
 				if d.Code == "duplicate_declaration" {
 					t.Fatalf("kind=%v unaccepted declaration poisoned state for %q: %+v", kind, src, r.Diagnostics)
@@ -214,19 +210,13 @@ func TestRejectedOrUnresolvedDeclarationDoesNotPoisonDuplicateState(t *testing.T
 }
 
 func TestProvenDeclarationValuesEstablishDuplicateState(t *testing.T) {
-	for _, first := range []string{
-		"#DIM VALUE,1+2",
-		"#DIM VALUE,1=1+2",
-		"#DIM CONST VALUE,1+1=1,2",
-		"#DIM CONST VALUE=1,2",
-		`#DIMS VALUE,1=("x")`,
-	} {
-		for _, kind := range []Kind{ERB, ERH} {
+	for _, first := range []string{"#DIM VALUE,1+2", "#DIM VALUE,1=1+2", "#DIM CONST VALUE,1+1=1,2", "#DIM CONST VALUE=1,2", `#DIMS VALUE,1=("x")`} {
+		for _, kind := range []erabasic.Kind{erabasic.ERB, erabasic.ERH} {
 			src := first + "\n#DIM VALUE,1\n"
-			if kind == ERB {
+			if kind == erabasic.ERB {
 				src = "@F\n" + src
 			}
-			r := FormatWithOptions([]byte(src), kind, Options{})
+			r := FormatWithOptions([]byte(src), Kind(kind), Options{})
 			if len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != "duplicate_declaration" {
 				t.Fatalf("kind=%v source=%q diagnostics=%+v", kind, src, r.Diagnostics)
 			}

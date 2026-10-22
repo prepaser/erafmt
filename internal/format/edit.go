@@ -1,12 +1,14 @@
 package format
 
-import "bytes"
+import (
+	"bytes"
+)
 
 func (p *formatter) addEdit(i, start, end int, text []byte, rule RuleID) {
-	if p.aborted {
+	if p.Aborted {
 		return
 	}
-	if p.rules[rule] && !bytes.Equal(text, p.src[start:end]) {
+	if p.rules[rule] && !bytes.Equal(text, p.Src[start:end]) {
 		if !p.reserveReplacementBytes(start, end, len(text)) {
 			return
 		}
@@ -19,20 +21,20 @@ func (p *formatter) addEditUnchecked(i, start, end int, text []byte, rule RuleID
 		return
 	}
 	col := p.columnAt(i, start)
-	if p.aborted {
+	if p.Aborted {
 		return
 	}
 	p.appendReservedEdit(edit{start, end, text, Change{Rule: rule, Line: i + 1, Column: col}})
 }
 
 func (p *formatter) reserveReplacementBytes(start, end, replacement int) bool {
-	if p.aborted {
+	if p.Aborted {
 		return false
 	}
 	if len(p.edits) != p.editBytesEdits {
 		p.recalculateEditBytes()
 	}
-	if start < 0 || end < start || replacement < 0 || end > len(p.src) {
+	if start < 0 || end < start || replacement < 0 || end > len(p.Src) {
 		return false
 	}
 	if p.editBytes > maxFormattedOutputBytes || uint64(replacement) > maxFormattedOutputBytes-p.editBytes {

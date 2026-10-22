@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -101,10 +102,7 @@ func TestReturnFormMissingArgumentDiagnosticFollowsExpressionSelection(t *testin
 	for _, test := range []struct {
 		options Options
 		want    string
-	}{
-		{options: Options{Select: []RuleID{}}, want: string(input)},
-		{options: Options{Select: []RuleID{InstructionIndent}}, want: "@F\n    RETURNFORM\n"},
-	} {
+	}{{options: Options{Select: []RuleID{}}, want: string(input)}, {options: Options{Select: []RuleID{InstructionIndent}}, want: "@F\n    RETURNFORM\n"}} {
 		r := FormatWithOptions(input, ERB, test.options)
 		if !bytes.Equal(r.Output, []byte(test.want)) || len(r.Diagnostics) != 0 {
 			t.Fatalf("options=%+v output=%q diagnostics=%+v", test.options, r.Output, r.Diagnostics)

@@ -1,14 +1,16 @@
 package format
 
+import "github.com/prepaser/erafmt/internal/erabasic"
+
 func (p *formatter) syntaxExtra(i int, head []byte, base int, command string, wordEnd int) (int, bool) {
-	switch command {
-	case "TIMES":
+	switch erabasic.ExtraCommand(command) {
+	case erabasic.ExtraTimes:
 		return p.syntaxExtraTimes(i, head, base, wordEnd), true
-	case "PRINTDATA", "PRINTDATAL", "PRINTDATAW", "PRINTDATAK", "PRINTDATAKL", "PRINTDATAKW", "PRINTDATAD", "PRINTDATADL", "PRINTDATADW", "STRDATA":
+	case erabasic.ExtraVariable:
 		return p.syntaxExtraVariableCommand(i, head, base, wordEnd, command), true
-	case "SPLIT":
+	case erabasic.ExtraSplit:
 		return p.syntaxExtraSplit(i, head, base, wordEnd), true
-	case "SWAP":
+	case erabasic.ExtraSwap:
 		return p.syntaxExtraSwap(i, head, base, wordEnd), true
 	default:
 		return -1, false
@@ -16,6 +18,7 @@ func (p *formatter) syntaxExtra(i int, head []byte, base int, command string, wo
 }
 
 func (p *formatter) syntaxExtraTimes(i int, head []byte, base, wordEnd int) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
 	fail := func(offset int, message string) int {
 		p.truncateEdits(mark)
@@ -25,54 +28,54 @@ func (p *formatter) syntaxExtraTimes(i int, head []byte, base, wordEnd int) int 
 		p.syntaxOpaque(i)
 		return -1
 	}
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.truncateEdits(mark)
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		return fail(base+wordEnd, "TIMES expects two arguments")
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
-	parts, overflow := commandPrefixParts(p.src, parts, 2, 2, p.allowFullwidthSpace, true)
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, 2, 2, p.AllowFullwidthSpace, true)
 	if len(parts) != 2 {
 		return fail(base+start, "TIMES expects two arguments")
 	}
-	left, right := extraFieldBoundsWithSpace(p.src, parts[0], p.allowFullwidthSpace)
-	firstMarked := commandFieldHasMandatoryMarker(p.src[left:right])
-	firstVariable := p.isVariableArgument(p.src[left:right])
+	left, right := erabasic.ExtraFieldBoundsWithSpace(p.Src, parts[0], p.AllowFullwidthSpace)
+	firstMarked := erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right])
+	firstVariable := analysis.VariableArgument(p.Src[left:right])
 	if firstMarked {
-		firstVariable = commandFieldVariableArgument(p, left, right)
+		firstVariable = analysis.CommandFieldVariableArgument(left, right)
 	}
 	if left == right || !firstVariable {
 		return fail(left, "TIMES requires a variable as its first argument")
 	}
 	if p.expressionParseEnabled() {
-		if tokens, err := p.commandFieldTokens(left, right); err == nil && !commandMacroPossibleForDialect(tokens, p.dialect) {
-			if !firstMarked && builtinScalarIndexesMissing(tokens, p.dialect) {
+		if tokens, err := analysis.CommandFieldTokens(left, right); err == nil && !erabasic.CommandMacroPossibleForDialect(tokens, analysis.Dialect) {
+			if !firstMarked && erabasic.BuiltinScalarIndexesMissing(tokens, p.Dialect) {
 				return fail(left, "scalar variable requires indexes")
 			}
-			if builtinVariableReadOnly(tokens, p.dialect) {
+			if erabasic.BuiltinVariableReadOnly(tokens, p.Dialect) {
 				return fail(left, "TIMES requires a mutable variable as its first argument")
 			}
-			if knownExpressionTypeForDialect(tokens, p.dialect) == knownValueString {
+			if erabasic.KnownExpressionTypeForDialect(tokens, p.Dialect) == erabasic.KnownValueString {
 				return fail(left, "TIMES requires a numeric variable as its first argument")
 			}
 		}
 	}
-	coefficientLeft, coefficientRight := extraFieldBoundsWithSpace(p.src, parts[1], p.allowFullwidthSpace)
-	coefficientMarked := commandFieldHasMandatoryMarker(p.src[coefficientLeft:coefficientRight])
-	coefficient := p.src[coefficientLeft:coefficientRight]
-	if coefficientLeft == coefficientRight || (!validTimesCoefficient(coefficient) && !timesCoefficientRuntimeWarning(coefficient) && !coefficientMarked) {
+	coefficientLeft, coefficientRight := erabasic.ExtraFieldBoundsWithSpace(p.Src, parts[1], p.AllowFullwidthSpace)
+	coefficientMarked := erabasic.CommandFieldHasMandatoryMarker(p.Src[coefficientLeft:coefficientRight])
+	coefficient := p.Src[coefficientLeft:coefficientRight]
+	if coefficientLeft == coefficientRight || (!erabasic.ValidTimesCoefficient(coefficient) && !erabasic.TimesCoefficientRuntimeWarning(coefficient) && !coefficientMarked) {
 		return fail(coefficientLeft, "TIMES requires a decimal coefficient")
 	}
-	if timesCoefficientRuntimeWarning(coefficient) && !coefficientMarked {
+	if erabasic.TimesCoefficientRuntimeWarning(coefficient) && !coefficientMarked {
 		if p.expressionParseEnabled() {
 			p.warning(i, coefficientLeft, "runtime_numeric", "TIMES coefficient is only partially parsed by the runtime")
 		}
@@ -95,11 +98,12 @@ func (p *formatter) syntaxExtraTimes(i int, head []byte, base, wordEnd int) int 
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
+	p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
 	return codeEnd
 }
 
 func (p *formatter) syntaxExtraVariableCommand(i int, head []byte, base, wordEnd int, command string) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
 	fail := func(offset int, message string) int {
 		p.truncateEdits(mark)
@@ -109,51 +113,51 @@ func (p *formatter) syntaxExtraVariableCommand(i int, head []byte, base, wordEnd
 		p.syntaxOpaque(i)
 		return -1
 	}
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.truncateEdits(mark)
 		p.syntaxOpaque(i)
 		return -1
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		p.setCodeEnd(i, base+wordEnd)
 		return base + wordEnd
 	}
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
-	parts, overflow := commandPrefixParts(p.src, parts, 1, 1, p.allowFullwidthSpace, true)
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, 1, 1, p.AllowFullwidthSpace, true)
 	if len(parts) != 1 {
 		return fail(base+start, "command expects at most one variable argument")
 	}
-	left, right := extraFieldBoundsWithSpace(p.src, parts[0], p.allowFullwidthSpace)
-	variable := p.isVariableArgument(p.src[left:right])
-	if commandFieldHasMandatoryMarker(p.src[left:right]) {
-		variable = commandFieldVariableArgument(p, left, right)
+	left, right := erabasic.ExtraFieldBoundsWithSpace(p.Src, parts[0], p.AllowFullwidthSpace)
+	variable := analysis.VariableArgument(p.Src[left:right])
+	if erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) {
+		variable = analysis.CommandFieldVariableArgument(left, right)
 	}
 	if left == right || !variable {
 		return fail(left, "command requires a variable argument")
 	}
 	if p.expressionParseEnabled() {
-		tokens, err := p.commandFieldTokens(left, right)
-		if err == nil && !commandMacroPossibleForDialect(tokens, p.dialect) {
-			if !commandFieldHasMandatoryMarker(p.src[left:right]) && builtinScalarIndexesMissing(tokens, p.dialect) {
+		tokens, err := analysis.CommandFieldTokens(left, right)
+		if err == nil && !erabasic.CommandMacroPossibleForDialect(tokens, analysis.Dialect) {
+			if !erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) && erabasic.BuiltinScalarIndexesMissing(tokens, p.Dialect) {
 				return fail(left, "scalar variable requires indexes")
 			}
-			expected := knownValueNumeric
+			expected := erabasic.KnownValueNumeric
 			if command == "STRDATA" {
-				expected = knownValueString
+				expected = erabasic.KnownValueString
 			}
-			if builtinVariableReadOnly(tokens, p.dialect) {
+			if erabasic.BuiltinVariableReadOnly(tokens, p.Dialect) {
 				p.truncateEdits(mark)
 				p.syntaxProblem(i, left, "command requires a mutable variable argument")
 				p.syntaxOpaque(i)
 				return -1
 			}
-			if !commandTypeMatches(expected, knownExpressionTypeForDialect(tokens, p.dialect)) {
+			if !erabasic.CommandTypeMatches(expected, erabasic.KnownExpressionTypeForDialect(tokens, p.Dialect)) {
 				p.truncateEdits(mark)
 				p.syntaxProblem(i, left, "command argument has an incompatible type")
 				p.syntaxOpaque(i)
@@ -175,88 +179,86 @@ func (p *formatter) syntaxExtraVariableCommand(i int, head []byte, base, wordEnd
 		return -1
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
-	p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
+	p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
 	return codeEnd
 }
 
-type extraFieldValidation struct {
-	valid bool
-	quiet bool
-}
-
 func (p *formatter) syntaxExtraSplit(i int, head []byte, base, wordEnd int) int {
+	analysis := p.commandAnalysisContext()
 	macroPrefix := false
-	return p.syntaxExtraFields(i, head, base, wordEnd, 3, 4, "SPLIT", func(n int, left, right int) extraFieldValidation {
+	return p.syntaxExtraFields(i, head, base, wordEnd, 3, 4, "SPLIT", func(n int, left, right int) erabasic.ExtraFieldValidation {
 		if left == right {
-			return extraFieldValidation{}
+			return erabasic.ExtraFieldValidation{}
 		}
-		tokens, err := p.commandFieldTokens(left, right)
-		potentialMacro := err == nil && commandMacroPossibleForDialect(tokens, p.dialect)
-		valid := n < 2 || err == nil && variableArgumentTokens(tokens)
+		tokens, err := analysis.CommandFieldTokens(left, right)
+		potentialMacro := err == nil && erabasic.CommandMacroPossibleForDialect(tokens, analysis.Dialect)
+		valid := n < 2 || err == nil && erabasic.VariableArgumentTokens(tokens)
 		if err == nil {
-			if n != 2 && !macroPrefix && !potentialMacro && !commandFieldHasMandatoryMarker(p.src[left:right]) && builtinScalarIndexesMissing(tokens, p.dialect) {
+			if n != 2 && !macroPrefix && !potentialMacro && !erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) && erabasic.BuiltinScalarIndexesMissing(tokens, analysis.Dialect) {
 				valid = false
 			}
-			if n >= 2 && !macroPrefix && !potentialMacro && builtinVariableReadOnly(tokens, p.dialect) {
+			if n >= 2 && !macroPrefix && !potentialMacro && erabasic.BuiltinVariableReadOnly(tokens, analysis.Dialect) {
 				valid = false
 			}
-			typeOfValue := knownExpressionTypeForDialect(tokens, p.dialect)
-			if n < 2 && typeOfValue == knownValueNumeric {
+			typeOfValue := erabasic.KnownExpressionTypeForDialect(tokens, analysis.Dialect)
+			if n < 2 && typeOfValue == erabasic.KnownValueNumeric {
 				valid = false
 			}
-			if n == 2 && typeOfValue == knownValueNumeric {
+			if n == 2 && typeOfValue == erabasic.KnownValueNumeric {
 				valid = false
 			}
-			if n == 3 && typeOfValue == knownValueString {
+			if n == 3 && typeOfValue == erabasic.KnownValueString {
 				valid = false
 			}
 			if n == 2 {
-				if known, array := builtinArrayRole(tokens); known && !array {
+				if known, array := erabasic.BuiltinArrayRole(tokens); known && !array {
 					valid = false
 				}
 			}
 		}
 		if !valid {
-			return extraFieldValidation{quiet: macroPrefix || potentialMacro}
+			return erabasic.ExtraFieldValidation{Quiet: macroPrefix || potentialMacro}
 		}
 		macroPrefix = macroPrefix || potentialMacro
-		return extraFieldValidation{valid: true}
+		return erabasic.ExtraFieldValidation{Valid: true}
 	})
 }
 
 func (p *formatter) syntaxExtraSwap(i int, head []byte, base, wordEnd int) int {
+	analysis := p.commandAnalysisContext()
 	macroPrefix := false
-	var destination knownValueType
-	return p.syntaxExtraFields(i, head, base, wordEnd, 2, 2, "SWAP", func(n int, left, right int) extraFieldValidation {
+	var destination erabasic.KnownValueType
+	return p.syntaxExtraFields(i, head, base, wordEnd, 2, 2, "SWAP", func(n int, left, right int) erabasic.ExtraFieldValidation {
 		if left >= right {
-			return extraFieldValidation{}
+			return erabasic.ExtraFieldValidation{}
 		}
-		tokens, err := p.commandFieldTokens(left, right)
-		potentialMacro := err == nil && commandMacroPossibleForDialect(tokens, p.dialect)
-		valid := err == nil && variableArgumentTokens(tokens)
+		tokens, err := analysis.CommandFieldTokens(left, right)
+		potentialMacro := err == nil && erabasic.CommandMacroPossibleForDialect(tokens, analysis.Dialect)
+		valid := err == nil && erabasic.VariableArgumentTokens(tokens)
 		if !valid {
-			return extraFieldValidation{quiet: macroPrefix || potentialMacro}
+			return erabasic.ExtraFieldValidation{Quiet: macroPrefix || potentialMacro}
 		}
-		if !potentialMacro && builtinVariableReadOnly(tokens, p.dialect) {
-			return extraFieldValidation{}
+		if !potentialMacro && erabasic.BuiltinVariableReadOnly(tokens, analysis.Dialect) {
+			return erabasic.ExtraFieldValidation{}
 		}
 		if !macroPrefix && !potentialMacro {
-			if !commandFieldHasMandatoryMarker(p.src[left:right]) && builtinScalarIndexesMissing(tokens, p.dialect) {
-				return extraFieldValidation{}
+			if !erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) && erabasic.BuiltinScalarIndexesMissing(tokens, analysis.Dialect) {
+				return erabasic.ExtraFieldValidation{}
 			}
-			actual := knownExpressionTypeForDialect(tokens, p.dialect)
+			actual := erabasic.KnownExpressionTypeForDialect(tokens, analysis.Dialect)
 			if n == 0 {
 				destination = actual
-			} else if !commandTypeMatches(destination, actual) {
-				return extraFieldValidation{}
+			} else if !erabasic.CommandTypeMatches(destination, actual) {
+				return erabasic.ExtraFieldValidation{}
 			}
 		}
 		macroPrefix = macroPrefix || potentialMacro
-		return extraFieldValidation{valid: true}
+		return erabasic.ExtraFieldValidation{Valid: true}
 	})
 }
 
-func (p *formatter) syntaxExtraFields(i int, head []byte, base, wordEnd, min, max int, command string, valid func(int, int, int) extraFieldValidation) int {
+func (p *formatter) syntaxExtraFields(i int, head []byte, base, wordEnd, min, max int, command string, valid func(int, int, int) erabasic.ExtraFieldValidation) int {
+	analysis := p.commandAnalysisContext()
 	mark := len(p.edits)
 	fail := func(offset int, message string) int {
 		p.truncateEdits(mark)
@@ -266,24 +268,24 @@ func (p *formatter) syntaxExtraFields(i int, head []byte, base, wordEnd, min, ma
 		p.syntaxOpaque(i)
 		return -1
 	}
-	start, end, comment, ok := p.registeredBody(head, wordEnd)
+	start, end, comment, ok := analysis.RegisteredBody(head, wordEnd)
 	if !ok {
 		p.truncateEdits(mark)
 		p.syntaxOpaque(i)
 		return -1
 	}
-	if !registeredHasArgumentWithSpace(head, start, end, p.allowFullwidthSpace) {
+	if !erabasic.RegisteredHasArgumentWithSpace(head, start, end, p.AllowFullwidthSpace) {
 		return fail(base+wordEnd, command+" expects command arguments")
 	}
-	codeEnd := registeredCodeEnd(base, end, comment)
-	if commandFieldHasDeferredMarker(p.src[base+start : codeEnd]) {
+	codeEnd := erabasic.RegisteredCodeEnd(base, end, comment)
+	if erabasic.CommandFieldHasDeferredMarker(p.Src[base+start : codeEnd]) {
 		p.syntaxOpaque(i)
 		return -1
 	}
-	parts := p.splitTopLevel(p.src, base+start, codeEnd, ',')
-	parts, overflow := commandPrefixParts(p.src, parts, max, min, p.allowFullwidthSpace, true)
+	parts := analysis.SplitTopLevel(p.Src, base+start, codeEnd, ',')
+	parts, overflow := erabasic.CommandPrefixParts(p.Src, parts, max, min, p.AllowFullwidthSpace, true)
 	if len(parts) < min {
-		if len(parts) < min && p.commandFieldsMayExpand(parts) {
+		if len(parts) < min && analysis.CommandFieldsMayExpand(parts) {
 			p.truncateEdits(mark)
 			p.syntaxOpaque(i)
 			return -1
@@ -291,10 +293,10 @@ func (p *formatter) syntaxExtraFields(i int, head []byte, base, wordEnd, min, ma
 		return fail(base+start, command+" has an invalid argument count")
 	}
 	for n, field := range parts {
-		left, right := extraFieldBoundsWithSpace(p.src, field, p.allowFullwidthSpace)
+		left, right := erabasic.ExtraFieldBoundsWithSpace(p.Src, field, p.AllowFullwidthSpace)
 		result := valid(n, left, right)
-		if !result.valid {
-			if result.quiet {
+		if !result.Valid {
+			if result.Quiet {
 				p.truncateEdits(mark)
 				p.syntaxOpaque(i)
 				return -1
@@ -317,85 +319,6 @@ func (p *formatter) syntaxExtraFields(i int, head []byte, base, wordEnd, min, ma
 	}
 	p.syntaxRegisteredCommandGap(i, head, base, wordEnd, start, end)
 	p.syntaxRegisteredCommaGaps(i, parts, codeEnd)
-	p.setCodeEnd(i, trimInputRight(p.src, base+start, codeEnd, p.allowFullwidthSpace))
+	p.setCodeEnd(i, erabasic.TrimInputRight(p.Src, base+start, codeEnd, p.AllowFullwidthSpace))
 	return codeEnd
-}
-
-func extraFieldBoundsWithSpace(src []byte, field syntaxSpan, allowFullwidthSpace bool) (int, int) {
-	left := field.start
-	left = trimInputLeft(src, left, field.end, allowFullwidthSpace)
-	right := field.end
-	right = trimInputRight(src, left, right, allowFullwidthSpace)
-	return left, right
-}
-
-func validTimesCoefficient(src []byte) bool {
-	if len(src) == 0 {
-		return false
-	}
-	i := 0
-	if src[i] == '+' || src[i] == '-' {
-		i++
-		if i == len(src) {
-			return false
-		}
-	}
-	digits := 0
-	for i < len(src) && src[i] >= '0' && src[i] <= '9' {
-		i++
-		digits++
-	}
-	if i < len(src) && src[i] == '.' {
-		i++
-		for i < len(src) && src[i] >= '0' && src[i] <= '9' {
-			i++
-			digits++
-		}
-	}
-	if digits == 0 {
-		return false
-	}
-	if i < len(src) && (src[i] == 'e' || src[i] == 'E') {
-		i++
-		if i < len(src) && src[i] == '-' {
-			i++
-		}
-		exponent := i
-		for i < len(src) && src[i] >= '0' && src[i] <= '9' {
-			i++
-		}
-		if exponent == i {
-			return false
-		}
-	}
-	return i == len(src)
-}
-
-func timesCoefficientRuntimeWarning(src []byte) bool {
-	if validTimesCoefficient(src) || len(src) == 0 {
-		return false
-	}
-	i := 0
-	if src[i] == '+' || src[i] == '-' {
-		i++
-		if i == len(src) {
-			return false
-		}
-	}
-	if i+1 < len(src) && src[i] == '0' && (src[i+1] == 'x' || src[i+1] == 'X' || src[i+1] == 'b' || src[i+1] == 'B') {
-		return false
-	}
-	digits := 0
-	for i < len(src) && src[i] >= '0' && src[i] <= '9' {
-		i++
-		digits++
-	}
-	if i < len(src) && src[i] == '.' {
-		i++
-		for i < len(src) && src[i] >= '0' && src[i] <= '9' {
-			i++
-			digits++
-		}
-	}
-	return digits > 0
 }

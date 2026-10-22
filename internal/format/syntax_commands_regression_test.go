@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -35,7 +36,6 @@ func TestFormAnyPreservesLiteralWhitespaceAfterSeparator(t *testing.T) {
 			t.Fatalf("allow-fullwidth body=%q output=%q diagnostics=%+v", body, result.Output, result.Diagnostics)
 		}
 	}
-
 	for _, body := range []string{"SETBGIMAGE    image", "REMOVEBGIMAGE\timage", "SETBGIMAGE \u3000image"} {
 		src := []byte("@F\n" + body + "\n")
 		result := FormatWithOptions(src, ERB, options)
@@ -50,10 +50,7 @@ func TestFormAnyPreservesLiteralWhitespaceAfterSeparator(t *testing.T) {
 		name string
 		body string
 		want string
-	}{
-		{name: "physical", body: "SETBGIMAGE;image { A+1 }", want: "SETBGIMAGE;image {A + 1}"},
-		{name: "physical-spaces", body: "REMOVEBGIMAGE;  image { A+1 }", want: "REMOVEBGIMAGE;  image {A + 1}"},
-	} {
+	}{{name: "physical", body: "SETBGIMAGE;image { A+1 }", want: "SETBGIMAGE;image {A + 1}"}, {name: "physical-spaces", body: "REMOVEBGIMAGE;  image { A+1 }", want: "REMOVEBGIMAGE;  image {A + 1}"}} {
 		t.Run(test.name, func(t *testing.T) {
 			result := FormatWithOptions([]byte("@F\n"+test.body+"\n"), ERB, options)
 			want := []byte("@F\n" + test.want + "\n")
@@ -62,7 +59,6 @@ func TestFormAnyPreservesLiteralWhitespaceAfterSeparator(t *testing.T) {
 			}
 		})
 	}
-
 	for _, body := range []string{"SETBGIMAGE    ", "REMOVEBGIMAGE   "} {
 		src := []byte("@F\n" + body + "\n")
 		result := FormatWithOptions(src, ERB, options)
@@ -80,21 +76,9 @@ func TestFormAnyPreservesLiteralWhitespaceInExplicitContinuation(t *testing.T) {
 		src  string
 		want string
 	}{
-		{
-			name: "tab",
-			src:  "@F\n{\nSETBGIMAGE\n\timage { A+1 }\n}\n",
-			want: "@F\n{\nSETBGIMAGE\n\timage {A + 1}\n}\n",
-		},
-		{
-			name: "wide",
-			src:  "@F\n{\nREMOVEBGIMAGE\n\u3000image { A+1 }\n}\n",
-			want: "@F\n{\nREMOVEBGIMAGE\n\u3000image {A + 1}\n}\n",
-		},
-		{
-			name: "semicolon",
-			src:  "@F\n{\nSETBGIMAGE\n;image { A+1 }\n}\n",
-			want: "@F\n{\nSETBGIMAGE\n;image {A + 1}\n}\n",
-		},
+		{name: "tab", src: "@F\n{\nSETBGIMAGE\n\timage { A+1 }\n}\n", want: "@F\n{\nSETBGIMAGE\n\timage {A + 1}\n}\n"},
+		{name: "wide", src: "@F\n{\nREMOVEBGIMAGE\n\u3000image { A+1 }\n}\n", want: "@F\n{\nREMOVEBGIMAGE\n\u3000image {A + 1}\n}\n"},
+		{name: "semicolon", src: "@F\n{\nSETBGIMAGE\n;image { A+1 }\n}\n", want: "@F\n{\nSETBGIMAGE\n;image {A + 1}\n}\n"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result := FormatWithOptions([]byte(test.src), ERB, options)
@@ -107,10 +91,7 @@ func TestFormAnyPreservesLiteralWhitespaceInExplicitContinuation(t *testing.T) {
 
 func TestSAVEVARAcceptsOneTrailingComma(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
-	for _, src := range []string{
-		"@F\nSAVEVAR \"file\",\"message\",RESULT,\n",
-		"@F\nSAVEVAR \"file\",\"message\",RESULT,   ; comment\n",
-	} {
+	for _, src := range []string{"@F\nSAVEVAR \"file\",\"message\",RESULT,\n", "@F\nSAVEVAR \"file\",\"message\",RESULT,   ; comment\n"} {
 		result := FormatWithOptions([]byte(src), ERB, options)
 		if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("RESULT,")) {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
@@ -126,10 +107,7 @@ func TestSAVEVARAcceptsOneTrailingComma(t *testing.T) {
 
 func TestSAVEVARRejectsDoubleTrailingComma(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
-	for _, src := range []string{
-		"@F\nSAVEVAR \"file\",\"message\",RESULT,,\n",
-		"@F\nSAVEVAR \"file\",\"message\",RESULT,,   ; comment\n",
-	} {
+	for _, src := range []string{"@F\nSAVEVAR \"file\",\"message\",RESULT,,\n", "@F\nSAVEVAR \"file\",\"message\",RESULT,,   ; comment\n"} {
 		result := FormatWithOptions([]byte(src), ERB, options)
 		if len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "unsupported_syntax" || !bytes.Equal(result.Output, []byte(src)) {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", src, result.Output, result.Diagnostics)
@@ -140,10 +118,7 @@ func TestSAVEVARRejectsDoubleTrailingComma(t *testing.T) {
 func TestSAVEVARAcceptsOneTrailingCommaInExplicitContinuation(t *testing.T) {
 	separator := " "
 	src := "@F\n{\nSAVEVAR \"file\",\"message\",RESULT,\n\n}\n"
-	result := FormatWithOptions([]byte(src), ERB, Options{
-		Select:                []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding},
-		ContinuationSeparator: &separator,
-	})
+	result := FormatWithOptions([]byte(src), ERB, Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}, ContinuationSeparator: &separator})
 	if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("RESULT,")) {
 		t.Fatalf("output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}

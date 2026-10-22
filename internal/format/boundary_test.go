@@ -2,15 +2,12 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestMalformedNestedFormDiagnostics(t *testing.T) {
-	for _, body := range []string{
-		`RETURNF @"text{1+2}`,
-		`RETURNF \@1?text#other`,
-		`RETURNF @"text{1+2"`,
-	} {
+	for _, body := range []string{`RETURNF @"text{1+2}`, `RETURNF \@1?text#other`, `RETURNF @"text{1+2"`} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{BinarySpacing, FormPadding}})
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != "unsupported_expression" || r.Diagnostics[0].Line != 2 {
@@ -53,11 +50,7 @@ func TestNulBoundaries(t *testing.T) {
 }
 
 func TestUnresolvedNestedFormMarkersRemainOpaque(t *testing.T) {
-	for _, body := range []string{
-		`RETURNF @"{A;#;B}"`,
-		`RETURNF \@A;#;B?x#y\@`,
-		`RETURNF @"{[[alias]]}"`,
-	} {
+	for _, body := range []string{`RETURNF @"{A;#;B}"`, `RETURNF \@A;#;B?x#y\@`, `RETURNF @"{[[alias]]}"`} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{BinarySpacing, FormPadding}})
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 0 || len(r.Changes) != 0 {
@@ -67,14 +60,7 @@ func TestUnresolvedNestedFormMarkersRemainOpaque(t *testing.T) {
 }
 
 func TestNulUnterminatedLiterals(t *testing.T) {
-	for _, body := range []string{
-		"RETURNF \"x\x00y\"",
-		"RETURNF \"x\\\x00y\"",
-		"RETURNF @\"x\x00{1+2}\"",
-		"PRINTFORM x\\\x00y",
-		"PRINTFORM {1+\x00}",
-		"PRINTV 'x\\\x00y",
-	} {
+	for _, body := range []string{"RETURNF \"x\x00y\"", "RETURNF \"x\\\x00y\"", "RETURNF @\"x\x00{1+2}\"", "PRINTFORM x\\\x00y", "PRINTFORM {1+\x00}", "PRINTV 'x\\\x00y"} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, Options{Select: []RuleID{BinarySpacing, FormPadding}})
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 {

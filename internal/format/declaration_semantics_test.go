@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -77,12 +78,7 @@ func TestDeclarationModifierScopeAndConflictDiagnostics(t *testing.T) {
 
 func TestDeclarationMacroPrefixesRemainOpaque(t *testing.T) {
 	input := []byte("#DEFINE MODIFIER_A CONST\n#DIM MODIFIER_A PRIVATE_MAC_A = 7\n#DEFINE INIT_E = 7\n#DIM CONST NAME_E INIT_E\n")
-	result := FormatWithOptions(input, ERH, Options{Select: []RuleID{
-		DeclarationWordSpacing,
-		DeclarationDefaultSpacing,
-		CommaSpacing,
-		BinarySpacing,
-	}})
+	result := FormatWithOptions(input, ERH, Options{Select: []RuleID{DeclarationWordSpacing, DeclarationDefaultSpacing, CommaSpacing, BinarySpacing}})
 	if !bytes.Equal(result.Output, input) || len(result.Diagnostics) != 0 {
 		t.Fatalf("macro-shaped declarations were not preserved: output=%q diagnostics=%+v", result.Output, result.Diagnostics)
 	}

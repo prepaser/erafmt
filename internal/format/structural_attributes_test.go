@@ -3,13 +3,15 @@ package format
 import (
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestTryGotoListRejectsFuncArguments(t *testing.T) {
-	var state state
-	_, message := state.instruction("TRYGOTOLIST", 1)
-	if message != "" || state.frames[0].listCommand != "TRYGOTOLIST" {
-		t.Fatalf("list frame=%+v message=%q", state.frames, message)
+	var state erabasic.State
+	_, message := state.Instruction("TRYGOTOLIST", 1)
+	if message != "" || state.Frames[0].ListCommand != "TRYGOTOLIST" {
+		t.Fatalf("list frame=%+v message=%q", state.Frames, message)
 	}
 	for _, tc := range []struct {
 		name string
@@ -162,11 +164,7 @@ func TestMethodReturnModesAllowFullwidthSpace(t *testing.T) {
 	for _, tc := range []struct {
 		src  string
 		want string
-	}{
-		{"@F\n#FUNCTIONS\u3000\nRETURNF \"x\"\n", ""},
-		{"@F\n#FUNCTION\u3000\nRETURNF 1\n", ""},
-		{"@F\n#FUNCTION\u3000\nRETURN 0\n", "RETURN cannot be used in #FUNCTION"},
-	} {
+	}{{"@F\n#FUNCTIONS\u3000\nRETURNF \"x\"\n", ""}, {"@F\n#FUNCTION\u3000\nRETURNF 1\n", ""}, {"@F\n#FUNCTION\u3000\nRETURN 0\n", "RETURN cannot be used in #FUNCTION"}} {
 		options := commandOptions()
 		options.AllowFullwidthSpace = true
 		r := FormatWithOptions([]byte(tc.src), ERB, options)

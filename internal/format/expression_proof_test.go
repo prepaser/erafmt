@@ -3,6 +3,8 @@ package format
 import (
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestWrappedBuiltinExpressionProof(t *testing.T) {
@@ -29,43 +31,15 @@ func TestWrappedBuiltinExpressionProof(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expression=%q lex: %v", expression, err)
 		}
-		if _, _, proven := builtinExpressionType(tokens, CommonDialect); proven {
+		if _, _, proven := erabasic.BuiltinExpressionType(tokens, erabasic.CommonDialect); proven {
 			t.Fatalf("expression=%q incorrectly proved dynamic index mutability", expression)
-		}
-	}
-}
-
-func TestBuiltinParenthesisDepthGuard(t *testing.T) {
-	for _, depth := range []int{256, 257, 300} {
-		expression := strings.Repeat("(", depth) + "NAME:0:0" + strings.Repeat(")", depth) + "+1"
-		tokens, err := lexExpression([]byte(expression), 0)
-		if err != nil {
-			t.Fatalf("depth=%d lex: %v", depth, err)
-		}
-		_, valid, proven := builtinExpressionType(tokens, CommonDialect)
-		if depth <= 257 && (!proven || valid) {
-			t.Fatalf("depth=%d invalid index was not proven invalid: valid=%v proven=%v", depth, valid, proven)
-		}
-		if depth == 300 && proven {
-			t.Fatalf("depth=%d exceeded proof guard: valid=%v proven=%v", depth, valid, proven)
 		}
 	}
 }
 
 func TestDebugFormPayloadsAreOpaque(t *testing.T) {
 	for _, command := range []string{"DEBUGPRINTFORM", "DEBUGPRINTFORML"} {
-		for _, payload := range []string{
-			`{(1,2)}`,
-			`{1,2,3,4}`,
-			`{RESULT=1}`,
-			`%1,2,3,4%`,
-			`\@(1,2)?yes#no\@`,
-			`{(1`,
-			`{"unterminated}`,
-			`{1\`,
-			`\@(1?yes#no`,
-			`{ 1+2 }`,
-		} {
+		for _, payload := range []string{`{(1,2)}`, `{1,2,3,4}`, `{RESULT=1}`, `%1,2,3,4%`, `\@(1,2)?yes#no\@`, `{(1`, `{"unterminated}`, `{1\`, `\@(1?yes#no`, `{ 1+2 }`} {
 			source := []byte("@F\n" + command + " " + payload + "\n")
 			result := FormatWithOptions(source, ERB, Options{})
 			want := []byte("@F\n    " + command + " " + payload + "\n")
@@ -83,21 +57,21 @@ func TestDebugFormPayloadsAreOpaque(t *testing.T) {
 func TestDirectIndexedBuiltinValueTypes(t *testing.T) {
 	for _, tc := range []struct {
 		line    string
-		dialect Dialect
+		dialect erabasic.Dialect
 		reject  bool
 	}{
-		{`RETURN NAME:(1+2)`, CommonDialect, true},
-		{`RETURN NAME:RESULT`, CommonDialect, true},
-		{`HTML_PRINT ITEMPRICE:(RESULT+1)`, CommonDialect, true},
-		{`HTML_PRINT NAME:(RESULT+1)`, CommonDialect, false},
-		{`RETURN NAME:USER_IDX`, CommonDialect, false},
-		{`RETURN NAME:ABS(1)`, CommonDialect, false},
-		{`RETURN NAME:(LOCAL@F:0)`, CommonDialect, false},
-		{`RETURN DAYNAME:(1+2)`, CommonDialect, false},
-		{`RETURN DAYNAME:(1+2)`, EMEE, true},
+		{`RETURN NAME:(1+2)`, erabasic.CommonDialect, true},
+		{`RETURN NAME:RESULT`, erabasic.CommonDialect, true},
+		{`HTML_PRINT ITEMPRICE:(RESULT+1)`, erabasic.CommonDialect, true},
+		{`HTML_PRINT NAME:(RESULT+1)`, erabasic.CommonDialect, false},
+		{`RETURN NAME:USER_IDX`, erabasic.CommonDialect, false},
+		{`RETURN NAME:ABS(1)`, erabasic.CommonDialect, false},
+		{`RETURN NAME:(LOCAL@F:0)`, erabasic.CommonDialect, false},
+		{`RETURN DAYNAME:(1+2)`, erabasic.CommonDialect, false},
+		{`RETURN DAYNAME:(1+2)`, erabasic.EMEE, true},
 	} {
 		src := []byte("@F\n" + tc.line + "\n")
-		r := FormatWithOptions(src, ERB, Options{Dialect: tc.dialect})
+		r := FormatWithOptions(src, ERB, Options{Dialect: Dialect(tc.dialect)})
 		if (len(r.Diagnostics) != 0) != tc.reject {
 			t.Fatalf("%q dialect=%v diagnostics=%+v", tc.line, tc.dialect, r.Diagnostics)
 		}

@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"strings"
 	"testing"
 )
@@ -83,7 +84,6 @@ func TestPaddedSkipEndUsesPreprocessorLayout(t *testing.T) {
 			t.Fatalf("unexpected change=%+v", change)
 		}
 	}
-
 	result = FormatWithOptions(input, ERB, Options{Select: []RuleID{}})
 	if !bytes.Equal(result.Output, input) || len(result.Changes) != 0 || len(result.Diagnostics) != 0 {
 		t.Fatalf("select none output=%q changes=%+v diagnostics=%+v", result.Output, result.Changes, result.Diagnostics)
@@ -101,7 +101,6 @@ func TestFileBoundaryBlankLinesOwnership(t *testing.T) {
 			t.Fatalf("disabled L006 emitted change %+v", c)
 		}
 	}
-
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{FileBoundaryBlankLines, BlankLineWhitespace, BlankLineRuns}})
 	if string(r.Output) != "RETURN 0\n" {
 		t.Fatalf("boundary output %q, changes=%+v", r.Output, r.Changes)
@@ -126,12 +125,10 @@ func TestFileBoundaryBlankLinesEOLAndFinalNewline(t *testing.T) {
 	if string(r.Output) != "@F\n" {
 		t.Fatalf("default EOL did not use surviving terminator fallback: %q", r.Output)
 	}
-
 	r = FormatWithOptions([]byte("\r\n\r\n@F"), ERB, Options{Select: []RuleID{FileBoundaryBlankLines, FinalNewline}, EOL: CRLF})
 	if string(r.Output) != "@F\r\n" {
 		t.Fatalf("explicit EOL was ignored: %q", r.Output)
 	}
-
 	r = FormatWithOptions([]byte("\n\n"), ERB, Options{Select: []RuleID{FileBoundaryBlankLines}})
 	if len(r.Output) != 0 || len(r.Changes) != 1 || r.Changes[0].Rule != FileBoundaryBlankLines {
 		t.Fatalf("L006-only all-blank output=%q changes=%+v", r.Output, r.Changes)
@@ -162,7 +159,6 @@ func TestFileBoundaryBlankLinesProtectsOpaqueBoundaries(t *testing.T) {
 	if string(r.Output) != string(input) {
 		t.Fatalf("SKIP boundary changed: %q", r.Output)
 	}
-
 	input = []byte("{\n\n}\nRETURN 0\n")
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{FileBoundaryBlankLines}})
 	if string(r.Output) != string(input) {
@@ -193,37 +189,19 @@ func TestInstructionIndentRetainsLeadingContentBOM(t *testing.T) {
 		name, src, want string
 		options         Options
 	}{
+		{name: "assignment", src: "\t\ufeffX+=1+2\n", want: "\t\ufeffX += 1 + 2\n", options: Options{Select: []RuleID{InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing}}},
+		{name: "postfix increment", src: " \ufeffX++\n", want: " \ufeffX++\n", options: Options{Select: []RuleID{InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing}}},
 		{
-			name: "assignment",
-			src:  "\t\ufeffX+=1+2\n",
-			want: "\t\ufeffX += 1 + 2\n",
-			options: Options{Select: []RuleID{
-				InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing,
-			}},
+			name:    "leading blank with boundary rule",
+			src:     "\n \ufeffX=1\n",
+			want:    " \ufeffX = 1\n",
+			options: Options{Select: []RuleID{InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing, FileBoundaryBlankLines}},
 		},
 		{
-			name: "postfix increment",
-			src:  " \ufeffX++\n",
-			want: " \ufeffX++\n",
-			options: Options{Select: []RuleID{
-				InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing,
-			}},
-		},
-		{
-			name: "leading blank with boundary rule",
-			src:  "\n \ufeffX=1\n",
-			want: " \ufeffX = 1\n",
-			options: Options{Select: []RuleID{
-				InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing, FileBoundaryBlankLines,
-			}},
-		},
-		{
-			name: "leading blank without boundary rule",
-			src:  "\n \ufeffX=1\n",
-			want: "\n\ufeffX = 1\n",
-			options: Options{Select: []RuleID{
-				InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing,
-			}},
+			name:    "leading blank without boundary rule",
+			src:     "\n \ufeffX=1\n",
+			want:    "\n\ufeffX = 1\n",
+			options: Options{Select: []RuleID{InstructionIndent, AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing}},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -264,7 +242,6 @@ func TestDeclarationBodySeparation(t *testing.T) {
 	if !bytes.Equal(again.Output, r.Output) || len(again.Changes) != 0 {
 		t.Fatalf("not idempotent: %+v", again)
 	}
-
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{DeclarationWordSpacing}})
 	if string(r.Output) != string(input) || len(r.Changes) != 0 {
 		t.Fatalf("disabled L007 changed input: %+v", r)
@@ -283,7 +260,6 @@ func TestDeclarationBodySeparationBlankRunsAndComments(t *testing.T) {
 	if string(r.Output) != want || len(r.Diagnostics) != 0 {
 		t.Fatalf("comment attachment output=%q diagnostics=%+v", r.Output, r.Diagnostics)
 	}
-
 	input = []byte("@F\n#DIM USR_X\n\n\nRETURN 0\n")
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{DeclarationBodySeparation}})
 	if string(r.Output) != string(input) || len(r.Changes) != 0 {
@@ -296,10 +272,7 @@ func TestDeclarationBodySeparationBlankRunsAndComments(t *testing.T) {
 }
 
 func TestDeclarationBodySeparationAllowsLeadingCommentsAndLabels(t *testing.T) {
-	for _, input := range []string{
-		"@F\n; declaration docs\n#DIM USR_X\nRETURN 0\n",
-		"@F\n#DIM USR_X\n$LABEL\nRETURN 0\n",
-	} {
+	for _, input := range []string{"@F\n; declaration docs\n#DIM USR_X\nRETURN 0\n", "@F\n#DIM USR_X\n$LABEL\nRETURN 0\n"} {
 		r := FormatWithOptions([]byte(input), ERB, Options{Select: []RuleID{DeclarationBodySeparation}})
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("input %q: diagnostics=%+v", input, r.Diagnostics)
@@ -332,7 +305,6 @@ func TestDeclarationBodySeparationGuards(t *testing.T) {
 			t.Fatalf("guard changed %q: output=%q changes=%+v diagnostics=%+v", input, r.Output, r.Changes, r.Diagnostics)
 		}
 	}
-
 	r := FormatWithOptions([]byte("@F\r\n#DIM USR_X\r\nRETURN 0\r\n"), ERB, Options{Select: []RuleID{DeclarationBodySeparation}})
 	if string(r.Output) != "@F\r\n#DIM USR_X\r\n\r\nRETURN 0\r\n" {
 		t.Fatalf("EOL output=%q", r.Output)
@@ -343,15 +315,7 @@ func TestDeclarationBodySeparationGuards(t *testing.T) {
 }
 
 func TestDeclarationBodyPayloadBoundaries(t *testing.T) {
-	for _, body := range []string{
-		"PRINTL  raw ; literal  ",
-		"DEBUGPRINT raw  ",
-		"PRINTFORM text { A+1 } ;literal",
-		"PRINTV 1+2, 'raw ;literal  ",
-		"RETURNFORM raw { A+1 }",
-		"CALLFORM F{ A+1 }, 2+3",
-		"INPUTS prompt { A+1 } ;literal",
-	} {
+	for _, body := range []string{"PRINTL  raw ; literal  ", "DEBUGPRINT raw  ", "PRINTFORM text { A+1 } ;literal", "PRINTV 1+2, 'raw ;literal  ", "RETURNFORM raw { A+1 }", "CALLFORM F{ A+1 }, 2+3", "INPUTS prompt { A+1 } ;literal"} {
 		input := "@F\n#DIM USR_X\n" + body + "\n"
 		options := Options{Select: []RuleID{DeclarationBodySeparation}}
 		r := FormatWithOptions([]byte(input), ERB, options)
@@ -374,10 +338,7 @@ func TestDeclarationBodyPayloadBoundaries(t *testing.T) {
 
 func TestLayoutBatchedEdits(t *testing.T) {
 	input := []byte("\r\n \t\r\n@A\r\n#DIM USR_X\r\nPRINTL raw  ;literal  \r\n \t\r\n\r\n  ; docs\r\n@B\r\n#DIM USR_Y\r\nRETURN 0\r\n\r\n \t")
-	options := Options{Select: []RuleID{
-		InstructionIndent, DeclarationIndent, CommentIndent, FunctionSeparation, DeclarationBodySeparation,
-		BlankLineWhitespace, BlankLineRuns, FileBoundaryBlankLines, LineEndingNormalization, FinalNewline,
-	}}
+	options := Options{Select: []RuleID{InstructionIndent, DeclarationIndent, CommentIndent, FunctionSeparation, DeclarationBodySeparation, BlankLineWhitespace, BlankLineRuns, FileBoundaryBlankLines, LineEndingNormalization, FinalNewline}}
 	r := FormatWithOptions(input, ERB, options)
 	want := "@A\n    #DIM USR_X\n\n    PRINTL raw  ;literal  \n\n; docs\n@B\n    #DIM USR_Y\n\n    RETURN 0\n"
 	if string(r.Output) != want || len(r.Diagnostics) != 0 {
@@ -410,7 +371,6 @@ func TestInlineCommentPrefixSpacingOwnership(t *testing.T) {
 			t.Fatalf("unexpected rule change %+v", c)
 		}
 	}
-
 	r = FormatWithOptions([]byte("@F\nRETURN 1;note  \n"), ERB, Options{Select: []RuleID{InlineCommentSpacing, CommentPrefixSpacing, CommentTrailingWhitespace}})
 	if string(r.Output) != "@F\nRETURN 1 ; note\n" {
 		t.Fatalf("combined comment output=%q changes=%+v", r.Output, r.Changes)
@@ -490,7 +450,6 @@ func TestLayoutEOLAndFinalNewline(t *testing.T) {
 			t.Fatalf("invalid EOL change %+v", c)
 		}
 	}
-
 	r = FormatWithOptions([]byte("RETURN 0"), ERB, Options{Select: []RuleID{FinalNewline}, EOL: CRLF})
 	if string(r.Output) != "RETURN 0\r\n" {
 		t.Fatalf("CRLF final output %q", r.Output)
@@ -498,7 +457,6 @@ func TestLayoutEOLAndFinalNewline(t *testing.T) {
 	if len(r.Changes) != 1 || r.Changes[0].Rule != FinalNewline || r.Changes[0].Column != 9 {
 		t.Fatalf("final newline change=%+v", r.Changes)
 	}
-
 	r = FormatWithOptions([]byte("RETURN 0\n\n   "), ERB, Options{Select: []RuleID{BlankLineRuns, FinalNewline}})
 	if string(r.Output) != "RETURN 0\n\n" || len(r.Changes) != 1 || r.Changes[0].Rule != BlankLineRuns {
 		t.Fatalf("blank EOF output=%q changes=%+v", r.Output, r.Changes)
@@ -537,13 +495,11 @@ func TestAttachedCommentsAndOpaqueFunction(t *testing.T) {
 	if string(r.Output) != "@A\nRETURN 0\n\n; docs\n@B\nRETURN 1\n" {
 		t.Fatalf("attached comments output %q", r.Output)
 	}
-
 	input = []byte("@BAD\n[[alias]]\n@GOOD\nRETURN 1\n")
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{FunctionSeparation}})
 	if string(r.Output) != string(input) {
 		t.Fatalf("opaque predecessor got separated: %q", r.Output)
 	}
-
 	input = []byte("@A\nRETURN 0\n;note   \n;---   \n;tail   \n@B\nRETURN 1\n")
 	r = FormatWithOptions(input, ERB, Options{Select: []RuleID{CommentIndent, CommentPrefixSpacing, CommentTrailingWhitespace}})
 	if string(r.Output) != "@A\nRETURN 0\n;note   \n;---   \n;tail   \n@B\nRETURN 1\n" {
@@ -572,10 +528,7 @@ func TestFullwidthDecorativeCommentPrefixIsProtected(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-	}{
-		{"standalone", ";　----------------\n"},
-		{"inline", "@F\nRETURN 1;　[IF USR_X]\n"},
-	}
+	}{{"standalone", ";　----------------\n"}, {"inline", "@F\nRETURN 1;　[IF USR_X]\n"}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := FormatWithOptions([]byte(tt.input), ERB, Options{Select: []RuleID{InlineCommentSpacing, CommentPrefixSpacing, CommentTrailingWhitespace}})

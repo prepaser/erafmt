@@ -1,12 +1,16 @@
 package format
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
+)
 
 func TestFormAlignmentRejectsKnownSystemNamesAfterProvenFields(t *testing.T) {
 	rules := allFormRules(t)
 	for _, name := range []string{"RESULT", "RESULTS", "CFLAG", "CSTR"} {
 		for _, source := range []string{"{1,2," + name + "}", "%\"text\",2," + name + "%"} {
-			edits, err := formEdits([]byte(source), rules, formLine)
+			edits, err := formEdits([]byte(source), rules, erabasic.FormLine)
 			if err == nil {
 				t.Fatalf("alignment %q was accepted", source)
 			}
@@ -22,13 +26,8 @@ func TestFormAlignmentPreservesDeferredAndCompatibleShapes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, source := range []string{
-		"{EFAUDIT_VALUE,2,CSTR}",
-		"{1,EFAUDIT_WIDTH,CSTR}",
-		"{1,2,ALIGN(X)}",
-		"{1,2,CSTR;!;}",
-	} {
-		edits, err := formEdits([]byte(source), rules, formLine)
+	for _, source := range []string{"{EFAUDIT_VALUE,2,CSTR}", "{1,EFAUDIT_WIDTH,CSTR}", "{1,2,ALIGN(X)}", "{1,2,CSTR;!;}"} {
+		edits, err := formEdits([]byte(source), rules, erabasic.FormLine)
 		if err != nil {
 			t.Fatalf("deferred alignment %q: %v", source, err)
 		}
@@ -44,7 +43,7 @@ func TestFormAlignmentRejectsKnownRolePunctuationTail(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, source := range []string{"{1,2,RIGHT+1}", "{1,2,RIGHT[0]}", "{1,2,RIGHT(1)}"} {
-		edits, err := formEdits([]byte(source), rules, formLine)
+		edits, err := formEdits([]byte(source), rules, erabasic.FormLine)
 		if err == nil {
 			t.Fatalf("punctuation tail %q was accepted", source)
 		}
@@ -57,7 +56,7 @@ func TestFormAlignmentRejectsKnownRolePunctuationTail(t *testing.T) {
 func TestFormAlignmentKeepsNeighboringValidIsland(t *testing.T) {
 	rules := allFormRules(t)
 	source := []byte("x {1,2,CSTR} y { A+B }")
-	edits, err := formEdits(source, rules, formLine)
+	edits, err := formEdits(source, rules, erabasic.FormLine)
 	if err == nil {
 		t.Fatal("invalid alignment was accepted")
 	}

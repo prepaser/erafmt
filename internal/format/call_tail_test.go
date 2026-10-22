@@ -6,12 +6,14 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestCallArgumentTails(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, command := range []string{"CALL", "CALLF", "TRYCALL", "JUMP", "GOTO", "CALLFORM", "TRYCALLFORM", "CALLSHARP"} {
-			if commandUnavailable(command, dialect) {
+			if erabasic.CommandUnavailable(command, dialect) {
 				continue
 			}
 			for _, tail := range []string{",2", "(2)", " 2", ")", "[2]", " +", ` "text"`, " RESULT", "　RESULT"} {
@@ -22,7 +24,7 @@ func TestCallArgumentTails(t *testing.T) {
 					}
 					prefix := "    " + command + " " + target + "(1+2)"
 					source := []byte("@F\n" + prefix + tail + "\n")
-					options := Options{Dialect: dialect, AllowFullwidthSpace: true}
+					options := Options{Dialect: Dialect(dialect), AllowFullwidthSpace: true}
 					result := FormatWithOptions(source, ERB, options)
 					if !bytes.Equal(result.Output, source) || len(result.Changes) != 0 || len(result.Diagnostics) != 1 {
 						t.Fatalf("output=%q changes=%v diagnostics=%v", result.Output, result.Changes, result.Diagnostics)
@@ -43,7 +45,7 @@ func TestCallArgumentTails(t *testing.T) {
 }
 
 func TestCallArgumentTailBoundaries(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, body := range []string{
 			`CALL TARGET(1+2)`,
 			`CALL TARGET(1+2);note`,
@@ -63,7 +65,7 @@ func TestCallArgumentTailBoundaries(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("%d/%q", dialect, body), func(t *testing.T) {
 				source := []byte("@F\n" + body + "\n")
-				options := Options{Dialect: dialect}
+				options := Options{Dialect: Dialect(dialect)}
 				result := FormatWithOptions(source, ERB, options)
 				if len(result.Diagnostics) != 0 {
 					t.Fatalf("output=%q diagnostics=%v", result.Output, result.Diagnostics)
@@ -83,10 +85,10 @@ func TestCallArgumentTailBoundaries(t *testing.T) {
 }
 
 func TestCallArgumentTailContinuation(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, separator := range []string{"", " ", "\t"} {
 			source := []byte("@F\n{\nCALL TARGET(1+\n2)\n ,2\n}\n")
-			result := FormatWithOptions(source, ERB, Options{Dialect: dialect, ContinuationSeparator: &separator})
+			result := FormatWithOptions(source, ERB, Options{Dialect: Dialect(dialect), ContinuationSeparator: &separator})
 			if len(result.Diagnostics) != 1 || !bytes.Contains(result.Output, []byte("CALL TARGET(1+\n2)\n ,2\n")) {
 				t.Fatalf("dialect=%d separator=%q output=%q diagnostics=%v", dialect, separator, result.Output, result.Diagnostics)
 			}

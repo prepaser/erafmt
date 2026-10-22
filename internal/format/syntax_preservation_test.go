@@ -2,16 +2,12 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestMalformedReturnCommaAssignmentStaysOpaque(t *testing.T) {
-	for _, source := range []string{
-		"@F\nRETURN A0,0=\n",
-		"@F\nRETURN A0,=\n",
-		"@F\nRETURN UNKNOWN,A=1\n",
-		"@F\nRETURN UNKNOWN,=1\n",
-	} {
+	for _, source := range []string{"@F\nRETURN A0,0=\n", "@F\nRETURN A0,=\n", "@F\nRETURN UNKNOWN,A=1\n", "@F\nRETURN UNKNOWN,=1\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		want := bytes.Replace([]byte(source), []byte("\nRETURN"), []byte("\n    RETURN"), 1)
 		if !bytes.Equal(result.Output, want) {
@@ -24,10 +20,7 @@ func TestMalformedReturnCommaAssignmentStaysOpaque(t *testing.T) {
 }
 
 func TestMalformedSetterQuotedOperandsStayOpaque(t *testing.T) {
-	for _, source := range []string{
-		"@F\nVARSET a,\"\"A\"\"\n",
-		"@F\nVARSET A0,\"\"A\"\"\n",
-	} {
+	for _, source := range []string{"@F\nVARSET a,\"\"A\"\"\n", "@F\nVARSET A0,\"\"A\"\"\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		want := bytes.Replace([]byte(source), []byte("\nVARSET"), []byte("\n    VARSET"), 1)
 		if !bytes.Equal(result.Output, want) {
@@ -40,10 +33,7 @@ func TestMalformedSetterQuotedOperandsStayOpaque(t *testing.T) {
 }
 
 func TestProtectedMetadataTailsStayOpaque(t *testing.T) {
-	for _, source := range []string{
-		"@A\n#00000000;;00\n",
-		"@F\n$A00000;;;0\n",
-	} {
+	for _, source := range []string{"@A\n#00000000;;00\n", "@F\n$A00000;;;0\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		want := bytes.Replace([]byte(source), []byte("\n#"), []byte("\n    #"), 1)
 		want = bytes.Replace(want, []byte("\n$"), []byte("\n    $"), 1)

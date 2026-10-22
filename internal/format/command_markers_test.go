@@ -3,13 +3,12 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestSpecializedCommandsDeferInlineDebugMarkers(t *testing.T) {
-	src := []byte("@F\n" +
-		"TIMES RESULT ;#; ,1+2\n" +
-		"SPLIT \"a\",\",\",RESULTS;#;,RESULT\n" +
-		"ARRAYSORT RESULTS;#;,FORWARD\n")
+	src := []byte("@F\n" + "TIMES RESULT ;#; ,1+2\n" + "SPLIT \"a\",\",\",RESULTS;#;,RESULT\n" + "ARRAYSORT RESULTS;#;,FORWARD\n")
 	r := FormatWithOptions(src, ERB, commandOptions())
 	if !bytes.Equal(r.Output, []byte("@F\n    TIMES RESULT ;#; ,1+2\n    SPLIT \"a\",\",\",RESULTS;#;,RESULT\n    ARRAYSORT RESULTS;#;,FORWARD\n")) {
 		t.Fatalf("output=%q diagnostics=%+v", r.Output, r.Diagnostics)
@@ -20,7 +19,7 @@ func TestSpecializedCommandsDeferInlineDebugMarkers(t *testing.T) {
 }
 
 func TestGraphicsDebugMarkersKeepTrailingBytes(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, command := range []string{"PRINT_SPACE", "PRINT_RECT", "PRINT_IMG"} {
 			for _, tail := range []string{"  ", "\t", "\u3000"} {
 				for _, rules := range [][]RuleID{{CodeTrailingWhitespace}, {CommandSpacing, CodeTrailingWhitespace}} {
@@ -29,7 +28,7 @@ func TestGraphicsDebugMarkersKeepTrailingBytes(t *testing.T) {
 					if len(rules) > 1 {
 						want = []byte(command + " 1 ;#; +2" + tail + "\n")
 					}
-					opts := Options{Dialect: dialect, AllowFullwidthSpace: true, Select: rules}
+					opts := Options{Dialect: Dialect(dialect), AllowFullwidthSpace: true, Select: rules}
 					r := FormatWithOptions(src, ERB, opts)
 					if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 0 {
 						t.Fatalf("source=%q dialect=%d output=%q diagnostics=%+v", src, dialect, r.Output, r.Diagnostics)
@@ -38,7 +37,6 @@ func TestGraphicsDebugMarkersKeepTrailingBytes(t *testing.T) {
 			}
 		}
 	}
-
 	for _, source := range []string{"PRINT_IMG \";#;\"  \n", "PRINT_IMG @\";#; {1+2}\"  \n"} {
 		r := FormatWithOptions([]byte(source), ERB, Options{Select: []RuleID{CodeTrailingWhitespace}})
 		want := []byte(source[:len(source)-3] + "\n")
@@ -62,14 +60,7 @@ func TestSpecializedCommandsKeepMandatoryMarkerBytes(t *testing.T) {
 }
 
 func TestMandatoryMarkersStillValidateProvenRoles(t *testing.T) {
-	for _, body := range []string{
-		"SPLIT ;!; RESULT,RESULTS,1",
-		"HTML_TAGSPLIT ;!; \"x\",RESULT,1",
-		"HTML_TAGSPLIT ;!; RESULT,RESULTS,RESULT",
-		"ARRAYSHIFT ;!; NO,1,2",
-		"ARRAYSORT ;!; NAME,FORWARD",
-		"SORTCHARA ;!; RESULTS,FORWARD",
-	} {
+	for _, body := range []string{"SPLIT ;!; RESULT,RESULTS,1", "HTML_TAGSPLIT ;!; \"x\",RESULT,1", "HTML_TAGSPLIT ;!; RESULT,RESULTS,RESULT", "ARRAYSHIFT ;!; NO,1,2", "ARRAYSORT ;!; NAME,FORWARD", "SORTCHARA ;!; RESULTS,FORWARD"} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, commandOptions())
 		if len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -79,14 +70,7 @@ func TestMandatoryMarkersStillValidateProvenRoles(t *testing.T) {
 }
 
 func TestMandatoryMarkersKeepValidSpecializedRoles(t *testing.T) {
-	for _, body := range []string{
-		"SPLIT ;!; \"a\",\",\",RESULTS,RESULT",
-		"HTML_TAGSPLIT ;!; \"a\",RESULTS,RESULT",
-		"ARRAYSORT ;!; RESULTS,FORWARD",
-		"SORTCHARA ;!; CSTR,FORWARD",
-		"TIMES RESULT;!;,1",
-		"SWAP RESULT;!;,RESULT",
-	} {
+	for _, body := range []string{"SPLIT ;!; \"a\",\",\",RESULTS,RESULT", "HTML_TAGSPLIT ;!; \"a\",RESULTS,RESULT", "ARRAYSORT ;!; RESULTS,FORWARD", "SORTCHARA ;!; CSTR,FORWARD", "TIMES RESULT;!;,1", "SWAP RESULT;!;,RESULT"} {
 		src := []byte("@F\n" + body + "\n")
 		r := FormatWithOptions(src, ERB, commandOptions())
 		if len(r.Diagnostics) != 0 || !bytes.Contains(r.Output, []byte(";!;")) {

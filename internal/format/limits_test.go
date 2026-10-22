@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestResourceLimitPreservesDeepStructure(t *testing.T) {
 	var source strings.Builder
 	source.WriteString("@F\n")
-	for i := 0; i <= maxStructureDepth; i++ {
+	for i := 0; i <= erabasic.MaxStructureDepth; i++ {
 		source.WriteString("IF 1\n")
 	}
 	input := []byte(source.String())
@@ -20,10 +22,10 @@ func TestResourceLimitPreservesDeepStructure(t *testing.T) {
 func TestResourceLimitPreservesAmplifiedOutput(t *testing.T) {
 	var source strings.Builder
 	source.WriteString("@F\n")
-	for i := 0; i < maxStructureDepth; i++ {
+	for i := 0; i < erabasic.MaxStructureDepth; i++ {
 		source.WriteString("IF 1\n")
 	}
-	for i := 0; i < maxFormattedOutputBytes/(maxStructureDepth*4)+1024; i++ {
+	for i := 0; i < maxFormattedOutputBytes/(erabasic.MaxStructureDepth*4)+1024; i++ {
 		source.WriteString("RETURN 0\n")
 	}
 	input := []byte(source.String())
@@ -33,7 +35,7 @@ func TestResourceLimitPreservesAmplifiedOutput(t *testing.T) {
 
 func TestResourceLimitPreservesDeepPreprocessor(t *testing.T) {
 	var source strings.Builder
-	for i := 0; i <= maxPreprocessorDepth; i++ {
+	for i := 0; i <= erabasic.MaxPreprocessorDepth; i++ {
 		source.WriteString("[IF X]\n")
 	}
 	input := []byte(source.String())
@@ -42,7 +44,7 @@ func TestResourceLimitPreservesDeepPreprocessor(t *testing.T) {
 }
 
 func TestResourceLimitPreservesLargeStatementSyntax(t *testing.T) {
-	input := append([]byte("@F\nRETURN "), bytes.Repeat([]byte("F("), maxSyntaxBytes/2+1)...)
+	input := append([]byte("@F\nRETURN "), bytes.Repeat([]byte("F("), erabasic.MaxSyntaxBytes/2+1)...)
 	result := FormatWithOptions(input, ERB, Options{})
 	assertResourceLimit(t, input, result)
 }
@@ -66,7 +68,7 @@ func TestResourceLimitBoundsMetadata(t *testing.T) {
 		source  string
 		options Options
 	}{
-		{"lines", strings.Repeat("\r\n", maxMetadataBytes/lineMetadataBytes+1), Options{Select: []RuleID{}}},
+		{"lines", strings.Repeat("\r\n", erabasic.MaxMetadataBytes/erabasic.LineMetadataBytes+1), Options{Select: []RuleID{}}},
 		{"edits", "@F\n" + strings.Repeat("RETURN 1+2 \n", 100000), Options{}},
 		{"diagnostics", "@F\n" + strings.Repeat("UNKNOWN 0\n", 150000), Options{}},
 	} {
@@ -78,21 +80,21 @@ func TestResourceLimitBoundsMetadata(t *testing.T) {
 }
 
 func TestMetadataBudgetSharedWithContinuation(t *testing.T) {
-	p := formatter{src: []byte("@F\n"), metadata: &metadataBudget{used: maxMetadataBytes - lineMetadataBytes}}
-	p.lines = linesOf(p.src)
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: []byte("@F\n"), Metadata: erabasic.NewMetadataBudget(erabasic.MaxMetadataBytes - erabasic.LineMetadataBytes)}}
+	p.Lines = linesOf(p.Src)
 	q := p.continuationProxy([]byte("RETURN 0"))
-	if q.aborted || q.metadata != p.metadata {
+	if q.Aborted || q.Metadata != p.Metadata {
 		t.Fatal("continuation did not share the available metadata budget")
 	}
 	q.warning(0, 0, "probe", "warning")
-	if !q.aborted || !hasFatalDiagnostic(q.diagnostics) {
+	if !q.Aborted || !hasFatalDiagnostic(q.diagnostics) {
 		t.Fatal("continuation exceeded its parent's metadata budget")
 	}
 }
 
 func TestContinuationVerificationMetadataLimit(t *testing.T) {
 	separator := ""
-	rows := (maxMetadataBytes - 5*lineMetadataBytes - 2*editMetadataBytes) / (lineMetadataBytes + 2*editMetadataBytes)
+	rows := (erabasic.MaxMetadataBytes - 5*erabasic.LineMetadataBytes - 2*editMetadataBytes) / (erabasic.LineMetadataBytes + 2*editMetadataBytes)
 	input := []byte("@F\n" + strings.Repeat("RETURN 1+2\n", rows) + "{\nRETURN 1+2\n}\n")
 	options := Options{Select: []RuleID{BinarySpacing}, ContinuationSeparator: &separator}
 	result := FormatWithOptions(input, ERB, options)
@@ -107,25 +109,27 @@ func TestContinuationVerificationMetadataLimit(t *testing.T) {
 
 func TestColumnMetadataLimitStopsEdit(t *testing.T) {
 	input := bytes.Repeat([]byte{'x'}, 8192)
-	p := formatter{src: input, lines: linesOf(input), metadata: &metadataBudget{used: maxMetadataBytes - editMetadataBytes}}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: input, Lines: linesOf(input), Metadata: erabasic.NewMetadataBudget(erabasic.MaxMetadataBytes - editMetadataBytes)}}
 	p.addEditUnchecked(0, 5000, 5000, []byte(" "), BinarySpacing)
-	if !p.aborted || len(p.edits) != 0 || !hasFatalDiagnostic(p.diagnostics) {
-		t.Fatalf("column limit: aborted=%v edits=%d diagnostics=%+v", p.aborted, len(p.edits), p.diagnostics)
+	if !p.Aborted || len(p.edits) != 0 || !hasFatalDiagnostic(p.diagnostics) {
+		t.Fatalf("column limit: aborted=%v edits=%d diagnostics=%+v", p.Aborted, len(p.edits), p.diagnostics)
 	}
 }
 
 func TestPreprocessorMetadataLimitUsesSourceOrder(t *testing.T) {
 	src := []byte(" [IF X]\n [IF X]\n")
 	p := formatter{
-		src:      src,
-		lines:    linesOf(src),
-		rules:    ruleSet{PreprocessorIndent: true},
-		metadata: &metadataBudget{used: maxMetadataBytes - editMetadataBytes},
-		ppLines:  map[int]int{0: bytes.IndexByte(src[:bytes.IndexByte(src, '\n')], ']'), 1: len(src) - 2},
+		DocumentSession: erabasic.DocumentSession{
+			Src:      src,
+			Lines:    linesOf(src),
+			Metadata: erabasic.NewMetadataBudget(erabasic.MaxMetadataBytes - editMetadataBytes),
+			PpLines:  map[int]int{0: bytes.IndexByte(src[:bytes.IndexByte(src, '\n')], ']'), 1: len(src) - 2},
+		},
+		rules: ruleSet{PreprocessorIndent: true},
 	}
 	p.layoutPreprocessors()
-	if !p.aborted || len(p.edits) != 1 || len(p.diagnostics) != 1 {
-		t.Fatalf("aborted=%v edits=%d diagnostics=%+v", p.aborted, len(p.edits), p.diagnostics)
+	if !p.Aborted || len(p.edits) != 1 || len(p.diagnostics) != 1 {
+		t.Fatalf("aborted=%v edits=%d diagnostics=%+v", p.Aborted, len(p.edits), p.diagnostics)
 	}
 	if p.diagnostics[0].Code != "resource_limit" || p.diagnostics[0].Line != 2 {
 		t.Fatalf("diagnostics=%+v", p.diagnostics)
@@ -133,8 +137,8 @@ func TestPreprocessorMetadataLimitUsesSourceOrder(t *testing.T) {
 }
 
 func TestRemoveLineRuleKeepsEditByteCache(t *testing.T) {
-	p := formatter{src: []byte("RETURN 0\nUNKNOWN 0\n"), rules: ruleSet{InstructionIndent: true, BinarySpacing: true}}
-	p.lines = linesOf(p.src)
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: []byte("RETURN 0\nUNKNOWN 0\n")}, rules: ruleSet{InstructionIndent: true, BinarySpacing: true}}
+	p.Lines = linesOf(p.Src)
 	p.addEdit(0, 0, 0, []byte("    "), InstructionIndent)
 	p.statementEdit = len(p.edits)
 	p.addEdit(1, 9, 9, []byte("    "), InstructionIndent)
@@ -167,7 +171,7 @@ func TestResourceLimitRejectsLargeContinuationSeparator(t *testing.T) {
 }
 
 func TestResourceLimitBoundsReplacementWork(t *testing.T) {
-	p := formatter{src: make([]byte, maxFormattedOutputBytes+1024)}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: make([]byte, maxFormattedOutputBytes+1024)}}
 	if !p.reserveReplacementBytes(0, 1024, 0) {
 		t.Fatal("expected a shrinking edit to fit")
 	}
@@ -182,28 +186,13 @@ func TestResourceLimitBoundsReplacementWork(t *testing.T) {
 	}
 }
 
-func TestContinuationRowLimitBoundary(t *testing.T) {
-	if continuationContentLimitExceeded(maxContinuationSegments - 1) {
-		t.Fatal("last allowed continuation row was rejected")
-	}
-	if !continuationContentLimitExceeded(maxContinuationSegments) {
-		t.Fatal("first continuation row beyond the limit was accepted")
-	}
-}
-
 func TestParsingLimitsApplyWithoutExpressionRules(t *testing.T) {
-	nested := strings.Repeat("F(", maxExpressionDepth+1) + "1" + strings.Repeat(")", maxExpressionDepth+1)
-	for _, source := range []string{
-		"@F(" + nested + ")\n",
-		"@F\n#LOCALSIZE " + nested + "\n",
-		"@F\nPRINT_SPACE " + nested + "\n",
-		"@F\nTIMES " + nested + ",1\n",
-		"@F\nSWAP " + nested + ",A\n",
-	} {
+	nested := strings.Repeat("F(", erabasic.MaxExpressionDepth+1) + "1" + strings.Repeat(")", erabasic.MaxExpressionDepth+1)
+	for _, source := range []string{"@F(" + nested + ")\n", "@F\n#LOCALSIZE " + nested + "\n", "@F\nPRINT_SPACE " + nested + "\n", "@F\nTIMES " + nested + ",1\n", "@F\nSWAP " + nested + ",A\n"} {
 		input := []byte(source)
 		assertResourceLimit(t, input, FormatWithOptions(input, ERB, Options{Select: []RuleID{}}))
 	}
-	input := []byte("@F\nPRINT_SPACE " + strings.Repeat("1+", maxExpressionTokens/2) + "1\n")
+	input := []byte("@F\nPRINT_SPACE " + strings.Repeat("1+", erabasic.MaxExpressionTokens/2) + "1\n")
 	assertResourceLimit(t, input, FormatWithOptions(input, ERB, Options{Select: []RuleID{}}))
 }
 
@@ -211,7 +200,7 @@ func TestParsingLimitIgnoresCanonicalWhitespace(t *testing.T) {
 	input := []byte("@F\nRETURN F(\"" + strings.Repeat("x", 980000) + "\"," + strings.Repeat("1+", 20000) + "1)\n")
 	options := Options{Select: []RuleID{BinarySpacing}}
 	first := FormatWithOptions(input, ERB, options)
-	if len(first.Diagnostics) != 0 || len(first.Output) <= maxSyntaxBytes {
+	if len(first.Diagnostics) != 0 || len(first.Output) <= erabasic.MaxSyntaxBytes {
 		t.Fatalf("first pass: output=%d diagnostics=%+v", len(first.Output), first.Diagnostics)
 	}
 	second := FormatWithOptions(first.Output, ERB, options)
@@ -221,7 +210,7 @@ func TestParsingLimitIgnoresCanonicalWhitespace(t *testing.T) {
 }
 
 func TestParsingLimitsLeaveOpaquePayloadsAlone(t *testing.T) {
-	payload := strings.Repeat("x", maxSyntaxBytes+1)
+	payload := strings.Repeat("x", erabasic.MaxSyntaxBytes+1)
 	for _, command := range []string{"PRINT", "DEBUGPRINTFORM"} {
 		input := []byte("@F\n" + command + " " + payload + "\n")
 		result := FormatWithOptions(input, ERB, Options{})
@@ -239,7 +228,7 @@ func TestParsingLimitsLeaveOpaquePayloadsAlone(t *testing.T) {
 			t.Fatalf("preserved payload hit limit: %+v", diagnostic)
 		}
 	}
-	input = []byte("[UNKNOWN]\n@G\nRETURN F(" + strings.Repeat("F(", maxExpressionDepth+1) + "1" + strings.Repeat(")", maxExpressionDepth+2) + "\n")
+	input = []byte("[UNKNOWN]\n@G\nRETURN F(" + strings.Repeat("F(", erabasic.MaxExpressionDepth+1) + "1" + strings.Repeat(")", erabasic.MaxExpressionDepth+2) + "\n")
 	result = FormatWithOptions(input, ERB, Options{})
 	if !bytes.Equal(result.Output, input) || hasFatalDiagnostic(result.Diagnostics) {
 		t.Fatalf("preserved file body was parsed: %+v", result.Diagnostics)
@@ -249,19 +238,19 @@ func TestParsingLimitsLeaveOpaquePayloadsAlone(t *testing.T) {
 func TestResourceLimitBoundsPreprocessorSiblingStates(t *testing.T) {
 	input := []byte("@F\n" + strings.Repeat("IF 1\n", 128) + "[IF X]\n" + strings.Repeat("[ELSEIF X]\n", 10000) + "[ENDIF]\n" + strings.Repeat("ENDIF\n", 128))
 	assertResourceLimit(t, input, FormatWithOptions(input, ERB, Options{Select: []RuleID{}}))
-	p := formatter{src: []byte("[IF X]\n[ELSE]\n[ENDIF]\n")}
-	p.lines = linesOfWithSpace(p.src, false)
-	for i := range p.lines {
-		p.directive(i, lBody(p.src, p.lines[i]))
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: []byte("[IF X]\n[ELSE]\n[ENDIF]\n")}}
+	p.Lines = linesOfWithSpace(p.Src, false)
+	for i := range p.Lines {
+		p.directive(i, erabasic.LBody(p.Src, p.Lines[i]))
 	}
-	if p.ppStateUnits != 0 {
-		t.Fatalf("closed preprocessor retained %d units", p.ppStateUnits)
+	if p.PpStateUnits != 0 {
+		t.Fatalf("closed preprocessor retained %d units", p.PpStateUnits)
 	}
 }
 
 func TestContinuationResourceLimitUsesPhysicalPosition(t *testing.T) {
 	separator := " "
-	input := []byte("@F\n{\nRETURN F(\n" + strings.Repeat("F(", maxExpressionDepth) + "1" + strings.Repeat(")", maxExpressionDepth+1) + "\n}\n")
+	input := []byte("@F\n{\nRETURN F(\n" + strings.Repeat("F(", erabasic.MaxExpressionDepth) + "1" + strings.Repeat(")", erabasic.MaxExpressionDepth+1) + "\n}\n")
 	result := FormatWithOptions(input, ERB, Options{ContinuationSeparator: &separator})
 	assertResourceLimit(t, input, result)
 	for _, diagnostic := range result.Diagnostics {
@@ -272,13 +261,8 @@ func TestContinuationResourceLimitUsesPhysicalPosition(t *testing.T) {
 }
 
 func TestNestedFormLimitAcrossParsingPaths(t *testing.T) {
-	nested := string(nestedFormSource(maxFormDepth + 1))
-	for _, source := range []string{
-		"@F(" + nested + ")\n",
-		"@F\nPRINT_IMG " + nested + "\n",
-		"@F\n#LOCALSIZE " + nested + "\n",
-		"@F\nINPUTS " + nested + "\n",
-	} {
+	nested := string(nestedFormSource(erabasic.MaxFormDepth + 1))
+	for _, source := range []string{"@F(" + nested + ")\n", "@F\nPRINT_IMG " + nested + "\n", "@F\n#LOCALSIZE " + nested + "\n", "@F\nINPUTS " + nested + "\n"} {
 		for _, options := range []Options{{}, {Select: []RuleID{}}} {
 			input := []byte(source)
 			assertResourceLimit(t, input, FormatWithOptions(input, ERB, options))
@@ -292,14 +276,8 @@ func TestNestedFormLimitAcrossParsingPaths(t *testing.T) {
 }
 
 func TestResourceLimitBoundsFieldSplitting(t *testing.T) {
-	fields := strings.Repeat("1,", maxExpressionTokens) + "1"
-	for _, source := range []string{
-		"@F(" + fields + ")\n",
-		"@F\nPRINT_SPACE " + fields + "\n",
-		"@F\n#DIM A," + fields + "\n",
-		"@F\n#DIM USR_A," + fields + "\n",
-		"@F\nPRINTFORM {" + fields + "}\n",
-	} {
+	fields := strings.Repeat("1,", erabasic.MaxExpressionTokens) + "1"
+	for _, source := range []string{"@F(" + fields + ")\n", "@F\nPRINT_SPACE " + fields + "\n", "@F\n#DIM A," + fields + "\n", "@F\n#DIM USR_A," + fields + "\n", "@F\nPRINTFORM {" + fields + "}\n"} {
 		for _, options := range []Options{{}, {Select: []RuleID{}}} {
 			if strings.Contains(source, "PRINTFORM") && options.Select != nil {
 				continue
@@ -337,12 +315,8 @@ func assertResourceLimit(t *testing.T, input []byte, result Result) {
 
 func TestAttachedCommentFilterKeepsEditByteCache(t *testing.T) {
 	src := []byte("  ; note\n@F\n")
-	p := formatter{
-		src:   src,
-		lines: linesOf(src),
-		rules: ruleSet{CommentIndent: true},
-	}
-	p.headers = []int{1}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: src, Lines: linesOf(src)}, rules: ruleSet{CommentIndent: true}}
+	p.Headers = []int{1}
 	p.edits = []edit{{start: 0, end: 2, text: []byte("    "), change: Change{Rule: CommentIndent, Line: 1}}}
 	p.editBytes = 4
 	p.editBytesEdits = 1

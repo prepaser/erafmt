@@ -2,16 +2,14 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestSyntaxExtraCommands(t *testing.T) {
 	input := []byte("@TIMES\nTIMES   VALUE : IDX , +01.2500e-02 ; keep  \n@DATA\nPRINTDATAK   VAR : 0\nDATA raw\nENDDATA\n@STR\nSTRDATA   TEXT : 0\nDATA raw\nENDDATA\n@SPLIT\nSPLIT \"a\"+\"b\",\"c\", OUT : 0, COUNT : 1\n@SWAP\nSWAP A : 0,B : 1\n")
 	want := []byte("@TIMES\n    TIMES VALUE:IDX, +01.2500e-02 ; keep  \n@DATA\n    PRINTDATAK VAR:0\n        DATA raw\n    ENDDATA\n@STR\n    STRDATA TEXT:0\n        DATA raw\n    ENDDATA\n@SPLIT\n    SPLIT \"a\" + \"b\", \"c\", OUT:0, COUNT:1\n@SWAP\n    SWAP A:0, B:1\n")
-	options := Options{Select: []RuleID{
-		FunctionIndent, InstructionIndent, CommandSpacing, BinarySpacing,
-		CommaSpacing, IndexSpacing, InlineCommentSpacing, CodeTrailingWhitespace,
-	}}
+	options := Options{Select: []RuleID{FunctionIndent, InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing, IndexSpacing, InlineCommentSpacing, CodeTrailingWhitespace}}
 	r := FormatWithOptions(input, ERB, options)
 	if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 0 {
 		t.Fatalf("output=%q diagnostics=%+v want=%q", r.Output, r.Diagnostics, want)

@@ -3,16 +3,16 @@ package format
 import (
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestContinuationStatementResourceOrigins(t *testing.T) {
-	for _, tc := range []struct {
-		name, prefix, statement string
-	}{
-		{"structure", "@F\n" + strings.Repeat("IF 1\n", maxStructureDepth), "IF 1"},
-		{"preprocessor", "@F\n" + strings.Repeat("[IF X]\n", maxPreprocessorDepth), "[IF X]"},
-		{"skip", "@F\n" + strings.Repeat("[IF X]\n", maxPreprocessorDepth), "[SKIPSTART]"},
-		{"state-units", "@F\n" + strings.Repeat("IF 1\n", maxStructureDepth-1) + strings.Repeat("[IF X]\n", maxPreprocessorStates/maxStructureDepth), "[ELSE]"},
+	for _, tc := range []struct{ name, prefix, statement string }{
+		{"structure", "@F\n" + strings.Repeat("IF 1\n", erabasic.MaxStructureDepth), "IF 1"},
+		{"preprocessor", "@F\n" + strings.Repeat("[IF X]\n", erabasic.MaxPreprocessorDepth), "[IF X]"},
+		{"skip", "@F\n" + strings.Repeat("[IF X]\n", erabasic.MaxPreprocessorDepth), "[SKIPSTART]"},
+		{"state-units", "@F\n" + strings.Repeat("IF 1\n", erabasic.MaxStructureDepth-1) + strings.Repeat("[IF X]\n", erabasic.MaxPreprocessorStates/erabasic.MaxStructureDepth), "[ELSE]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, separator := range []string{"", " "} {
@@ -32,7 +32,7 @@ func TestContinuationStatementResourceOrigins(t *testing.T) {
 
 func TestContinuationDelimiterResourceKeepsOrigin(t *testing.T) {
 	src := []byte("{\n\n  IF 1\n}\n")
-	p := formatter{src: src, lines: linesOf(src), statementOrigins: map[int]sourcePosition{0: {line: 2, offset: 5}}}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: src, Lines: linesOf(src), StatementOrigins: map[int]erabasic.SourcePosition{0: {Line: 2, Offset: 5}}}}
 	p.resourceProblem(0, 0, "continuation source exceeds the formatter resource limit")
 	if len(p.diagnostics) != 1 || p.diagnostics[0].Line != 1 || p.diagnostics[0].Column != 1 {
 		t.Fatalf("diagnostics=%+v", p.diagnostics)

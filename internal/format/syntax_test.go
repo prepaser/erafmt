@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestSyntaxAssignmentPreservesPlainPayload(t *testing.T) {
 	input := []byte("@F\nA=  raw  ; keep\nB+= 1+2 ; keep\n")
-	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{
-		AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing, InlineCommentSpacing,
-	}})
+	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{AssignmentLeftSpacing, AssignmentRightSpacing, BinarySpacing, InlineCommentSpacing}})
 	want := []byte("@F\nA = raw  ; keep\nB += 1 + 2 ; keep\n")
 	if !bytes.Equal(result.Output, want) || len(result.Diagnostics) != 0 {
 		t.Fatalf("output = %q, diagnostics = %#v, want %q", result.Output, result.Diagnostics, want)
@@ -19,9 +19,7 @@ func TestSyntaxAssignmentPreservesPlainPayload(t *testing.T) {
 
 func TestSyntaxPrintVAndFormBoundaries(t *testing.T) {
 	input := []byte("@F\nPRINTV A+B,' raw  ,C+D\nPRINTFORM  raw { A+B }\nCALL F [ 1 ,2 ] ( 3 )\n")
-	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{
-		CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding,
-	}})
+	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}})
 	want := []byte("@F\nPRINTV A + B, ' raw  , C + D\nPRINTFORM  raw {A + B}\nCALL F[1, 2](3)\n")
 	if !bytes.Equal(result.Output, want) || len(result.Diagnostics) != 0 {
 		t.Fatalf("output = %q, diagnostics = %#v, want %q", result.Output, result.Diagnostics, want)
@@ -29,7 +27,7 @@ func TestSyntaxPrintVAndFormBoundaries(t *testing.T) {
 }
 
 func TestSyntaxNoArgAndEndDataMetadata(t *testing.T) {
-	if !partial("ENDDATA") {
+	if !erabasic.Partial("ENDDATA") {
 		t.Fatal("ENDDATA must be a partial block instruction")
 	}
 	input := []byte("@F\nPRINTDATA\nENDDATA  \n")
@@ -42,9 +40,7 @@ func TestSyntaxNoArgAndEndDataMetadata(t *testing.T) {
 
 func TestSyntaxConsumedSemicolonStaysOpaque(t *testing.T) {
 	input := []byte("@F\nIF A\nENDIF;comment  \n")
-	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{
-		InlineCommentSpacing, CodeTrailingWhitespace,
-	}})
+	result := FormatWithOptions(input, ERB, Options{Select: []RuleID{InlineCommentSpacing, CodeTrailingWhitespace}})
 	if !bytes.Equal(result.Output, input) || len(result.Diagnostics) != 0 {
 		t.Fatalf("output = %q, diagnostics = %#v, want unchanged", result.Output, result.Diagnostics)
 	}
@@ -136,11 +132,7 @@ func TestPrintVLargeRawAtomPreservesInput(t *testing.T) {
 }
 
 func TestPrintVRawProjectionRetainsPhysicalOffsets(t *testing.T) {
-	for input, want := range map[string]string{
-		"@F\nPRINTV A+B,'raw\\, text  ,C+D\n": "@F\nPRINTV A + B, 'raw\\, text  , C + D\n",
-		"@F\nPRINTV A    +    B\n":            "@F\nPRINTV A + B\n",
-		"@F\nPRINTV 'raw',A+B\n":              "@F\nPRINTV 'raw', A + B\n",
-	} {
+	for input, want := range map[string]string{"@F\nPRINTV A+B,'raw\\, text  ,C+D\n": "@F\nPRINTV A + B, 'raw\\, text  , C + D\n", "@F\nPRINTV A    +    B\n": "@F\nPRINTV A + B\n", "@F\nPRINTV 'raw',A+B\n": "@F\nPRINTV 'raw', A + B\n"} {
 		result := FormatWithOptions([]byte(input), ERB, Options{Select: []RuleID{BinarySpacing, CommaSpacing}})
 		if !bytes.Equal(result.Output, []byte(want)) || len(result.Diagnostics) != 0 {
 			t.Fatalf("output=%q diagnostics=%+v want=%q", result.Output, result.Diagnostics, want)
@@ -172,10 +164,10 @@ func TestPrintVDisabledFullwidthSeparatorsPreserveInput(t *testing.T) {
 		t.Fatalf("second pass=%+v", again)
 	}
 	body := []byte("A　　B C")
-	p := formatter{src: body}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: body}}
 	projection, _, _, ok := p.printVProjection(0, 0, len(body))
-	if !ok || !bytes.Equal(projection.src, body) {
-		t.Fatalf("disabled projection=%q want=%q", projection.src, body)
+	if !ok || !bytes.Equal(projection.Src, body) {
+		t.Fatalf("disabled projection=%q want=%q", projection.Src, body)
 	}
 }
 
@@ -227,7 +219,6 @@ func TestInstructionIdentityAmbiguityPreservesBody(t *testing.T) {
 	if string(r.Output) != "@F\nvalue = raw+A\n" {
 		t.Fatalf("lowercase assignment output %q", r.Output)
 	}
-
 	input = []byte("@BAD\r\nIF　USR_X\r\nRETURN 0\r\nENDIF\r\n@GOOD\r\nRETURN 1\r\n")
 	r = FormatWithOptions(input, ERB, Options{})
 	want := "@BAD\nIF　USR_X\nRETURN 0\nENDIF\n@GOOD\n    RETURN 1\n"

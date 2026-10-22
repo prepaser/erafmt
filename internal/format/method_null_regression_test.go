@@ -1,16 +1,20 @@
 package format
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
+)
 
 func TestConsumedEmptyMethodArgumentsRejected(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		assertMethodContractInvalid(t, dialect, `HTML_GETPRINTEDSTR ,`)
-		assertMethodContractValid(t, dialect,
-			`HTML_GETPRINTEDSTR`, `HTML_GETPRINTEDSTR 1`, `HTML_GETPRINTEDSTR 1,`,
-		)
+		assertMethodContractValid(t, dialect, `HTML_GETPRINTEDSTR`, `HTML_GETPRINTEDSTR 1`, `HTML_GETPRINTEDSTR 1,`)
 		assertMethodContractDeferred(t, dialect, `HTML_GETPRINTEDSTR UNKNOWN`)
 	}
-	assertMethodContractInvalid(t, EMEE,
+	assertMethodContractInvalid(
+		t,
+		erabasic.EMEE,
 		`DT_COLUMN_ADD "t","c",,1`,
 		`DT_CELL_GET "t",1,"c",,`,
 		`DT_CELL_GETS "t",1,"c",,`,
@@ -44,7 +48,9 @@ func TestConsumedEmptyMethodArgumentsRejected(t *testing.T) {
 }
 
 func TestEMEENullableMethodArgumentsRemainValid(t *testing.T) {
-	assertMethodContractValid(t, EMEE,
+	assertMethodContractValid(
+		t,
+		erabasic.EMEE,
 		`CBGSETBUTTONSPRITE 1,"a","b",2,3,4`,
 		`CBGSETBUTTONSPRITE 1,"a","b",2,3,4,"tip"`,
 		`DT_CELL_SET "t",1,"c",,1`,
@@ -72,7 +78,9 @@ func TestEMEENullableMethodArgumentsRemainValid(t *testing.T) {
 }
 
 func TestEMEEConsumedEmptyMethodArgumentsDeferUnknowns(t *testing.T) {
-	assertMethodContractDeferred(t, EMEE,
+	assertMethodContractDeferred(
+		t,
+		erabasic.EMEE,
 		`DT_ROW_ADD "t",UNKNOWN,RESULTS,1`,
 		`DT_ROW_ADD "t",RESULTS,UNKNOWN,1`,
 		`DT_ROW_ADD UNKNOWN,,RESULTS,1`,

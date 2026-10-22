@@ -3,6 +3,8 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestGraphicsTrailingCommaUsesEffectiveShape(t *testing.T) {
@@ -16,7 +18,6 @@ func TestGraphicsTrailingCommaUsesEffectiveShape(t *testing.T) {
 	if !bytes.Equal(again.Output, r.Output) || len(again.Changes) != 0 {
 		t.Fatalf("not idempotent: output=%q changes=%+v", again.Output, again.Changes)
 	}
-
 	invalid := FormatWithOptions([]byte("PRINT_RECT 1,2,3,\n"), ERB, Options{Dialect: CommonDialect, Select: []RuleID{CommaSpacing}})
 	if !bytes.Equal(invalid.Output, []byte("PRINT_RECT 1,2,3,\n")) || len(invalid.Diagnostics) != 1 {
 		t.Fatalf("three-field output=%q diagnostics=%+v", invalid.Output, invalid.Diagnostics)
@@ -29,8 +30,8 @@ func TestGraphicsTrailingCommaUsesEffectiveShape(t *testing.T) {
 
 func TestGraphicsNumericFieldsAcceptProvenComparisons(t *testing.T) {
 	source := []byte("PRINT_SPACE \"a\"==\"b\"\nPRINT_RECT \"a\"==\"b\",1,2,3\nPRINT_SPACE RESULTS==\"a\"\nPRINT_RECT CSTR==\"a\",1,2,3\nPRINT_SPACE UNKNOWN==\"a\"\nPRINT_RECT UNKNOWN==\"a\",1,2,3\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824} {
-		r := FormatWithOptions(source, ERB, Options{Dialect: dialect, Select: []RuleID{BinarySpacing, CommaSpacing}})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824} {
+		r := FormatWithOptions(source, ERB, Options{Dialect: Dialect(dialect), Select: []RuleID{BinarySpacing, CommaSpacing}})
 		want := []byte("PRINT_SPACE \"a\" == \"b\"\nPRINT_RECT \"a\" == \"b\", 1, 2, 3\nPRINT_SPACE RESULTS == \"a\"\nPRINT_RECT CSTR == \"a\", 1, 2, 3\nPRINT_SPACE UNKNOWN == \"a\"\nPRINT_RECT UNKNOWN == \"a\", 1, 2, 3\n")
 		if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%d output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)

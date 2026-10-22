@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestContinuationTrustedContext(t *testing.T) {
@@ -19,9 +21,9 @@ func TestContinuationTrustedContext(t *testing.T) {
 		{"@F\n{\nSELECTCASE \"x\"\n}\nCASE 1\nENDSELECT\n", "CASE has an incompatible type", 5},
 		{"@F\nTRYGOTOLIST\n{\nFUNC TARGET\n(1)\n}\nENDFUNC\n", "TRYGOTOLIST FUNC cannot have subnames or arguments", 5},
 	} {
-		for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+		for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 			for _, sep := range []string{"", " ", "\t"} {
-				options := Options{Dialect: dialect, ContinuationSeparator: &sep}
+				options := Options{Dialect: Dialect(dialect), ContinuationSeparator: &sep}
 				result := FormatWithOptions([]byte(tc.src), ERB, options)
 				if len(result.Diagnostics) != 1 || !strings.Contains(result.Diagnostics[0].Message, tc.msg) || result.Diagnostics[0].Line != tc.line {
 					t.Fatalf("source=%q dialect=%v separator=%q diagnostics=%+v", tc.src, dialect, sep, result.Diagnostics)
@@ -83,26 +85,10 @@ func TestContinuationWarningKeepsDeclarationContext(t *testing.T) {
 		src  string
 		code string
 	}{
-		{
-			name: "duplicate dimension",
-			src:  "@F\n#FUNCTION\n#DIM USR_X\n{\n#DIM USR_X\n}\n#DIM USR_X\nRETURN 0\n",
-			code: "duplicate_declaration",
-		},
-		{
-			name: "suspicious dimension",
-			src:  "@F\n#FUNCTION\n{\n#DIM USR_X,0\n}\nRETURN 0\n",
-			code: "suspicious_dimension",
-		},
-		{
-			name: "suspicious initializer",
-			src:  "@F\n#FUNCTION\n{\n#DIM USR_X=\n}\nRETURN 0\n",
-			code: "suspicious_initializer",
-		},
-		{
-			name: "suspicious local size",
-			src:  "@F\n#FUNCTION\n{\n#LOCALSIZE 1/0\n}\nRETURN 0\n",
-			code: "suspicious_local_size",
-		},
+		{name: "duplicate dimension", src: "@F\n#FUNCTION\n#DIM USR_X\n{\n#DIM USR_X\n}\n#DIM USR_X\nRETURN 0\n", code: "duplicate_declaration"},
+		{name: "suspicious dimension", src: "@F\n#FUNCTION\n{\n#DIM USR_X,0\n}\nRETURN 0\n", code: "suspicious_dimension"},
+		{name: "suspicious initializer", src: "@F\n#FUNCTION\n{\n#DIM USR_X=\n}\nRETURN 0\n", code: "suspicious_initializer"},
+		{name: "suspicious local size", src: "@F\n#FUNCTION\n{\n#LOCALSIZE 1/0\n}\nRETURN 0\n", code: "suspicious_local_size"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result := FormatWithOptions([]byte(tc.src), ERB, Options{ContinuationSeparator: &separator})

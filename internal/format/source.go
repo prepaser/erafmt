@@ -4,25 +4,13 @@ import (
 	"bytes"
 	"cmp"
 	"slices"
-	"sort"
-	"unicode/utf8"
 )
-
-type line struct {
-	start, bodyEnd, end, indentEnd int
-}
-
-type sourcePosition struct {
-	line, offset int
-}
 
 type edit struct {
 	start, end int
 	text       []byte
 	change     Change
 }
-
-func halfSpace(b byte) bool { return b == ' ' || b == '\t' }
 
 func allSpaces(b []byte) bool {
 	for _, c := range b {
@@ -156,7 +144,6 @@ func summarizeSortedEdits(src []byte, edits []edit) outputSummary {
 		summary.last = chunk[len(chunk)-1]
 		summary.empty = false
 	}
-
 	pos := 0
 	for _, e := range edits {
 		consume(src[pos:e.start])
@@ -167,45 +154,8 @@ func summarizeSortedEdits(src []byte, edits []edit) outputSummary {
 	return summary
 }
 
-func column(src []byte, l line, offset int) int {
-	offset = min(l.bodyEnd, max(l.start, offset))
-	return utf8.RuneCount(src[l.start:offset]) + 1
-}
-
-type columnPoint struct {
-	offset, column int
-}
-
 func (p *formatter) columnAt(row, offset int) int {
-	l := p.lines[row]
-	offset = min(l.bodyEnd, max(l.start, offset))
-	if offset-l.start < 4096 {
-		return column(p.src, l, offset)
-	}
-	points, ok := p.columns[row]
-	if !ok {
-		if p.columns == nil {
-			p.columns = make(map[int][]columnPoint)
-		}
-		count := (l.end-l.start)/1024 + 1
-		if !p.reserveMetadata(row, offset, count*32) {
-			return column(p.src, l, offset)
-		}
-		points = make([]columnPoint, 1, count)
-		points[0] = columnPoint{l.start, 1}
-		col, last := 1, l.start
-		for pos := l.start; pos < l.end; pos++ {
-			if !utf8.RuneStart(p.src[pos]) {
-				continue
-			}
-			if pos-last >= 1024 {
-				points = append(points, columnPoint{pos, col})
-				last = pos
-			}
-			col++
-		}
-		p.columns[row] = points
-	}
-	i := sort.Search(len(points), func(i int) bool { return points[i].offset > offset }) - 1
-	return points[i].column + utf8.RuneCount(p.src[points[i].offset:offset])
+	return p.DocumentSession.SourceColumn(row, offset, func(origin, size int) bool {
+		return p.reserveMetadata(row, origin, size)
+	})
 }

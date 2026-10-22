@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"strings"
 	"testing"
 )
@@ -17,24 +18,13 @@ func TestConstantExpressionsPreserveInvalidIslands(t *testing.T) {
 }
 
 func TestCompoundLiteralTypes(t *testing.T) {
-	for _, source := range []string{
-		"@F\nIF \"a\"+\"b\"\nENDIF\n",
-		"@F\nPRINTS \"a\"==\"b\"\n",
-		"@F\nPRINTFORM {\"a\"*2}\n",
-		"@F\nIF 1?\"a\"#\"b\"\nENDIF\n",
-	} {
+	for _, source := range []string{"@F\nIF \"a\"+\"b\"\nENDIF\n", "@F\nPRINTS \"a\"==\"b\"\n", "@F\nPRINTFORM {\"a\"*2}\n", "@F\nIF 1?\"a\"#\"b\"\nENDIF\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		if len(result.Diagnostics) != 1 || result.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("source=%q diagnostics=%+v", source, result.Diagnostics)
 		}
 	}
-	for _, source := range []string{
-		"@F\nIF \"a\"==\"b\"\nENDIF\n",
-		"@F\nPRINTS 1?\"a\"#\"b\"\n",
-		"@F\nPRINTFORM %\"a\"*2%\n",
-		"@F\nRETURN !(1)+2<<3\n",
-		"@F\nPRINTS \"a\"*(-1)\n",
-	} {
+	for _, source := range []string{"@F\nIF \"a\"==\"b\"\nENDIF\n", "@F\nPRINTS 1?\"a\"#\"b\"\n", "@F\nPRINTFORM %\"a\"*2%\n", "@F\nRETURN !(1)+2<<3\n", "@F\nPRINTS \"a\"*(-1)\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		if len(result.Diagnostics) != 0 {
 			t.Fatalf("source=%q diagnostics=%+v", source, result.Diagnostics)

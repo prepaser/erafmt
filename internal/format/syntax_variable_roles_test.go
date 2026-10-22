@@ -2,14 +2,12 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestVariableArgumentAcceptsUnaryPlus(t *testing.T) {
-	for _, line := range []string{
-		"TIMES +RESULT,1.25",
-		"SWAP +RESULT,RESULT",
-	} {
+	for _, line := range []string{"TIMES +RESULT,1.25", "SWAP +RESULT,RESULT"} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, commandOptions())
 		if len(r.Diagnostics) != 0 {
@@ -34,11 +32,7 @@ func TestVariableArgumentAcceptsUnaryPlus(t *testing.T) {
 
 func TestVariableArgumentRejectsUnsupportedIndexShapes(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing}}
-	for _, line := range []string{
-		"TIMES RESULT[0],1.25",
-		"SWAP RESULT:0+1,RESULT",
-		"VARSET RESULT:0+1,1",
-	} {
+	for _, line := range []string{"TIMES RESULT[0],1.25", "SWAP RESULT:0+1,RESULT", "VARSET RESULT:0+1,1"} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -67,14 +61,7 @@ func TestSAVEVARValidatesFieldRoles(t *testing.T) {
 			t.Fatalf("valid %q diagnostics=%v output=%q", line, r.Diagnostics, r.Output)
 		}
 	}
-	for _, line := range []string{
-		`SAVEVAR "file","message",1`,
-		`SAVEVAR "file","message",RESULT+1`,
-		`SAVEVAR "file",1,RESULT`,
-		`SAVEVAR 1,EFAUDIT_FIELDS`,
-		`SAVEVAR "file","message",CFLAG`,
-		`SAVEVAR "file","message",CSTR`,
-	} {
+	for _, line := range []string{`SAVEVAR "file","message",1`, `SAVEVAR "file","message",RESULT+1`, `SAVEVAR "file",1,RESULT`, `SAVEVAR 1,EFAUDIT_FIELDS`, `SAVEVAR "file","message",CFLAG`, `SAVEVAR "file","message",CSTR`} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -101,16 +88,7 @@ func TestSetterRolesFollowKnownDestinationType(t *testing.T) {
 			t.Fatalf("valid %q diagnostics=%v output=%q", line, r.Diagnostics, r.Output)
 		}
 	}
-	for _, line := range []string{
-		`VARSET RESULT,"x"`,
-		`VARSET RESULTS,1`,
-		`CVARSET CSTR,0,1`,
-		`CVARSET CFLAG,0,"x"`,
-		`VARSET CSTR+1,"x"`,
-		`POWER RESULT,"x",2`,
-		`VARSET +RESULTS,"x"`,
-		`VARSET +(RESULTS:0),"x"`,
-	} {
+	for _, line := range []string{`VARSET RESULT,"x"`, `VARSET RESULTS,1`, `CVARSET CSTR,0,1`, `CVARSET CFLAG,0,"x"`, `VARSET CSTR+1,"x"`, `POWER RESULT,"x",2`, `VARSET +RESULTS,"x"`, `VARSET +(RESULTS:0),"x"`} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -121,21 +99,13 @@ func TestSetterRolesFollowKnownDestinationType(t *testing.T) {
 
 func TestSPLITValidatesKnownValueTypes(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
-	for _, line := range []string{
-		`SPLIT "a","b",RESULTS`,
-		`SPLIT "a","b",RESULTS,RESULT`,
-		`SPLIT EFAUDIT_FIELDS,1,RESULTS`,
-	} {
+	for _, line := range []string{`SPLIT "a","b",RESULTS`, `SPLIT "a","b",RESULTS,RESULT`, `SPLIT EFAUDIT_FIELDS,1,RESULTS`} {
 		r := FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, options)
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("valid %q diagnostics=%v output=%q", line, r.Diagnostics, r.Output)
 		}
 	}
-	for _, line := range []string{
-		`SPLIT 1,2,RESULTS`,
-		`SPLIT "a","b",RESULT`,
-		`SPLIT "a","b",RESULTS,RESULTS`,
-	} {
+	for _, line := range []string{`SPLIT 1,2,RESULTS`, `SPLIT "a","b",RESULT`, `SPLIT "a","b",RESULTS,RESULTS`} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {

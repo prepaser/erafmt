@@ -4,8 +4,25 @@
 
 - `main.go` starts the CLI.
 - `internal/cli` handles arguments, paths, encoding, diagnostics, and file writes.
-- `internal/format` implements parsing, formatting rules, and source preservation.
+- `internal/erabasic` analyzes EraBasic syntax, language contracts, source ranges, and structural state.
+- `internal/format` applies formatting rules to analyzed source and verifies the resulting edits.
 - `docs` contains usage and development references.
+
+## Analysis and formatting
+
+The dependency direction is `cli` → `format` → `erabasic`. The CLI owns file discovery, encoding conversion, diagnostics output, and writes. The formatting API remains in `format`; language analysis has no dependency on formatting rules or CLI code.
+
+Analysis uses tokens, source ranges, FORM events, and statement facts instead of an AST. Per-call sessions retain function and preprocessor state, source mappings, and bounded lexical caches. Literal payloads and uncertain syntax remain byte-sensitive. Expression and FORM scanners share one package because their grammar is recursive.
+
+The formatter requests the analysis needed by the selected rules. It does not validate every expression eagerly and then hide unwanted diagnostics: rule selection also affects which syntax is inspected and how much work is performed. Structural checks that previously ran without expression rules still run.
+
+Formatting owns indentation, spacing, comment layout, blank lines, EOLs, edit ordering, and rollback. Language analysis supplies boundaries, token roles, type proofs, and preservation scopes. Re-lexing and FORM fingerprints verify language equivalence after a proposed change; replacement text and rule attribution stay in the formatter.
+
+Continuation analysis retains physical row ranges and virtual separator spans. The formatter maps proposed edits to physical rows and checks their canonical formatting result before committing declaration or label context. Verification sessions isolate their lexical caches while sharing the call's work budget. A virtual separator is analysis input, never an editable source range.
+
+Metadata accounting is shared by analysis, diagnostics, edits, and continuation verification. Parser depth and token limits remain separate from replacement and output limits. Rolling back an edit does not refund analysis work. Source positions refer to original physical UTF-8 source, including diagnostics produced from logical continuations.
+
+Language tests live with the analyzer. Formatting, edit mapping, public API, and CLI preservation tests exercise the formatting facade. The CLI preservation oracle remains independent of the production analyzer.
 
 ## Build
 

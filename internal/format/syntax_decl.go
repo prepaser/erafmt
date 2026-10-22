@@ -2,8 +2,8 @@ package format
 
 import (
 	"bytes"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func (p *formatter) syntaxHeader(i int, head []byte, base int) int {
@@ -20,17 +20,17 @@ func (p *formatter) syntaxHeader(i int, head []byte, base int) int {
 	}
 	end, _ := p.syntaxCommentEnd(head, 1, len(head))
 	if end == len(head) {
-		end = syntaxHeaderMarkerEnd(head)
+		end = erabasic.SyntaxHeaderMarkerEnd(head)
 	}
 	head = head[:end]
-	_, delimiter := headerPrefix(head, 1)
+	_, delimiter := erabasic.HeaderPrefix(head, 1)
 	if delimiter < 0 {
 		p.setCodeEnd(i, base+len(head))
 		return base + len(head)
 	}
 	if p.rules[DelimiterSpacing] && (head[delimiter] == '[' || head[delimiter] == '(') {
 		gapStart := delimiter
-		gapStart = trimInputRight(head, 1, gapStart, p.allowFullwidthSpace)
+		gapStart = erabasic.TrimInputRight(head, 1, gapStart, p.AllowFullwidthSpace)
 		p.addEdit(i, base+gapStart, base+delimiter, nil, DelimiterSpacing)
 	}
 	if head[delimiter] == '[' {
@@ -42,7 +42,7 @@ func (p *formatter) syntaxHeader(i int, head []byte, base int) int {
 		delimiter = close + 1
 		gapStart := delimiter
 		for delimiter < len(head) {
-			size := inputSpaceSize(head, delimiter, p.allowFullwidthSpace)
+			size := erabasic.InputSpaceSize(head, delimiter, p.AllowFullwidthSpace)
 			if size == 0 {
 				break
 			}
@@ -74,49 +74,32 @@ func (p *formatter) syntaxHeader(i int, head []byte, base int) int {
 	return base + len(head)
 }
 
-func syntaxHeaderMarkerEnd(head []byte) int {
-	for i := 1; i < len(head); {
-		if next, atom := syntaxAtomEnd(head, i, len(head)); atom {
-			if next < 0 {
-				return len(head)
-			}
-			i = next
-			continue
-		}
-		if executableMarker(head, i) {
-			return i
-		}
-		i++
-	}
-	return len(head)
-}
-
 func (p *formatter) syntaxSignatureArgs(i, start, end int) bool {
 	mark := len(p.edits)
 	fail := func() bool {
 		p.truncateEdits(mark)
 		return false
 	}
-	spans := p.splitTopLevel(p.src, start, end, ',')
+	spans := p.semanticContext().SplitTopLevel(p.Src, start, end, ',')
 	for index, span := range spans {
-		if trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace) >= trimInputRight(p.src, span.start, span.end, p.allowFullwidthSpace) {
+		if erabasic.TrimInputLeft(p.Src, span.Start, span.End, p.AllowFullwidthSpace) >= erabasic.TrimInputRight(p.Src, span.Start, span.End, p.AllowFullwidthSpace) {
 			if len(spans) == 1 || index == len(spans)-1 && index > 0 {
 				continue
 			}
 			return fail()
 		}
-		if eq, ok := p.topEqual(p.src, span.start, span.end); ok {
-			if trimInputLeft(p.src, span.start, eq, p.allowFullwidthSpace) >= trimInputRight(p.src, span.start, eq, p.allowFullwidthSpace) || trimInputLeft(p.src, eq+1, span.end, p.allowFullwidthSpace) >= trimInputRight(p.src, eq+1, span.end, p.allowFullwidthSpace) {
+		if eq, ok := p.semanticContext().DeclarationTopEqual(span.Start, span.End); ok {
+			if erabasic.TrimInputLeft(p.Src, span.Start, eq, p.AllowFullwidthSpace) >= erabasic.TrimInputRight(p.Src, span.Start, eq, p.AllowFullwidthSpace) || erabasic.TrimInputLeft(p.Src, eq+1, span.End, p.AllowFullwidthSpace) >= erabasic.TrimInputRight(p.Src, eq+1, span.End, p.AllowFullwidthSpace) {
 				return fail()
 			}
 			if p.rules[DeclarationDefaultSpacing] {
-				p.addEdit(i, trimInputRight(p.src, span.start, eq, p.allowFullwidthSpace), eq, []byte{' '}, DeclarationDefaultSpacing)
-				p.addEdit(i, eq+1, trimInputLeft(p.src, eq+1, span.end, p.allowFullwidthSpace), []byte{' '}, DeclarationDefaultSpacing)
+				p.addEdit(i, erabasic.TrimInputRight(p.Src, span.Start, eq, p.AllowFullwidthSpace), eq, []byte{' '}, DeclarationDefaultSpacing)
+				p.addEdit(i, eq+1, erabasic.TrimInputLeft(p.Src, eq+1, span.End, p.AllowFullwidthSpace), []byte{' '}, DeclarationDefaultSpacing)
 			}
-			if !p.syntaxExpression(i, span.start, eq, false) || !p.syntaxExpression(i, eq+1, span.end, false) {
+			if !p.syntaxExpression(i, span.Start, eq, false) || !p.syntaxExpression(i, eq+1, span.End, false) {
 				return fail()
 			}
-		} else if !p.syntaxExpression(i, span.start, span.end, false) {
+		} else if !p.syntaxExpression(i, span.Start, span.End, false) {
 			return fail()
 		}
 	}
@@ -142,22 +125,23 @@ func (p *formatter) syntaxDeclaration(i int, head []byte, base int) int {
 	}
 	end, _ := p.syntaxCommentEnd(head, 0, len(head))
 	head = head[:end]
-	name := declarationName(head)
+	word := p.declarationWordAnalysis(head)
+	name := word.Name
 	if name == "DEFINE" {
-		if p.kind == ERH && !p.sharpStateUnknown && functionStyleDefine(head) {
-			p.preserveFile = true
-			p.problem(i, base+declarationWordEnd(head), "unsupported_declaration", "function-style #DEFINE is unsupported", Unsupported)
+		if p.Kind == erabasic.ERH && !p.SharpStateUnknown && erabasic.FunctionStyleDefine(head) {
+			p.PreserveFile = true
+			p.problem(i, base+erabasic.DeclarationWordEnd(head), "unsupported_declaration", "function-style #DEFINE is unsupported", erabasic.Unsupported)
 			p.syntaxOpaque(i)
 			return fail()
 		}
-		if p.kind == ERH && !p.sharpStateUnknown {
+		if p.Kind == erabasic.ERH && !p.SharpStateUnknown {
 			p.syntaxObjectDefine(i, head, base)
 			return -1
 		}
 		return fail()
 	}
 	if name == "FUNCTION" || name == "FUNCTIONS" {
-		if p.kind == ERB && bareSharpFunction(head, name, p.allowFullwidthSpace) {
+		if p.Kind == erabasic.ERB && erabasic.BareSharpFunction(head, name, p.AllowFullwidthSpace) {
 			p.setCodeEnd(i, base+len(head))
 			return base + len(head)
 		}
@@ -167,18 +151,11 @@ func (p *formatter) syntaxDeclaration(i int, head []byte, base int) int {
 		p.setCodeEnd(i, base+len(head))
 		return base + len(head)
 	}
-	wordEnd := declarationWordEnd(head)
+	wordEnd := word.WordEnd
 	if wordEnd < 0 {
 		return fail()
 	}
-	bodyStart := wordEnd
-	for bodyStart < len(head) {
-		size := inputSpaceSize(head, bodyStart, p.allowFullwidthSpace)
-		if size == 0 {
-			break
-		}
-		bodyStart += size
-	}
+	bodyStart := word.BodyStart
 	if bodyStart >= len(head) {
 		if name == "DIM" || name == "DIMS" {
 			p.syntaxProblem(i, base+bodyStart, "declaration requires an identifier")
@@ -203,16 +180,16 @@ func (p *formatter) syntaxDeclaration(i int, head []byte, base int) int {
 		if !p.syntaxExpression(i, base+bodyStart, base+len(head), false) {
 			return fail()
 		}
-		if p.expressionParseEnabled() && !p.sharpStateUnknown && !p.optional && !p.conditional() {
+		if p.expressionParseEnabled() && !p.SharpStateUnknown && !p.Optional && !p.conditional() {
 			left := base + bodyStart
 			right := base + len(head)
-			if tokens, err := p.lexSyntaxRange(left, right); err == nil && !commandMacroPossible(tokens) {
-				status, value := localSizeConstantProof(tokens)
-				if status == localSizeConstantInvalid {
+			if tokens, err := p.semanticContext().LexSyntaxRange(left, right); err == nil && !erabasic.CommandMacroPossible(tokens) {
+				status, value := erabasic.LocalSizeConstantProof(tokens)
+				if status == erabasic.LocalSizeConstantInvalid {
 					p.warning(i, left, "suspicious_local_size", "local size expression is not a valid integer constant")
 					return fail()
 				}
-				if status == localSizeConstantValid && (value <= 0 || value >= 1<<31-1) {
+				if status == erabasic.LocalSizeConstantValid && (value <= 0 || value >= 1<<31-1) {
 					p.warning(i, left, "suspicious_local_size", "constant local size is ignored because it is outside the range 1..2147483646")
 					return fail()
 				}
@@ -224,68 +201,69 @@ func (p *formatter) syntaxDeclaration(i int, head []byte, base int) int {
 	if name != "DIM" && name != "DIMS" {
 		return fail()
 	}
-	modifiers, modifierKnown := declarationModifierInfo(p.src, base+wordEnd, base+bodyStart, p.allowFullwidthSpace)
+	modifierAnalysis := p.declarationModifierAnalysis(base+wordEnd, base+bodyStart)
+	modifiers, modifierKnown := modifierAnalysis.Set, modifierAnalysis.Known
 	end = base + len(head)
-	eq, hasEqual := p.topEqual(p.src, base+bodyStart, end)
+	eq, hasEqual := p.semanticContext().DeclarationTopEqual(base+bodyStart, end)
 	leftEnd := end
 	if hasEqual {
 		leftEnd = eq
 	}
-	nameSpans := p.splitTopLevel(p.src, base+bodyStart, leftEnd, ',')
-	if p.aborted {
+	nameSpans := p.semanticContext().SplitTopLevel(p.Src, base+bodyStart, leftEnd, ',')
+	if p.Aborted {
 		return fail()
 	}
-	modifierIssue := declarationModifierIssue(p.kind, modifiers)
-	if len(nameSpans) > 0 && declarationMacroNameSpan(p, nameSpans[0]) && modifierIssue == "" && !(p.kind == ERH && modifiers.ref) {
+	modifierIssue := modifierAnalysis.Issue
+	if len(nameSpans) > 0 && declarationMacroNameSpan(p, nameSpans[0]) && modifierIssue == "" && !(p.Kind == erabasic.ERH && modifiers.Ref) {
 		return fail()
 	}
-	if p.kind == ERB && !p.optional && !p.conditional() {
+	if p.Kind == erabasic.ERB && !p.Optional && !p.conditional() {
 		if p.privateDeclarationNameMacroPossible(nameSpans) {
 			return fail()
 		}
 	}
 	if declarationReservedName(p, base+bodyStart, leftEnd) {
-		if p.kind == ERB {
-			p.problem(i, base+bodyStart, "unsupported_syntax", "declaration name is reserved", Unsupported)
+		if p.Kind == erabasic.ERB {
+			p.problem(i, base+bodyStart, "unsupported_syntax", "declaration name is reserved", erabasic.Unsupported)
 		} else {
 			p.syntaxProblem(i, base+bodyStart, "declaration name is reserved")
 		}
 		return fail()
 	}
-	if p.kind == ERH && modifierKnown && modifiers.ref {
-		p.preserveFile = true
+	if p.Kind == erabasic.ERH && modifierKnown && modifiers.Ref {
+		p.PreserveFile = true
 		p.syntaxProblem(i, base+wordEnd, "ERH REF declarations are unsupported")
 		return fail()
 	}
 	if hasEqual {
-		if trimInputLeft(p.src, base+bodyStart, eq, p.allowFullwidthSpace) >= trimInputRight(p.src, base+bodyStart, eq, p.allowFullwidthSpace) || trimInputLeft(p.src, eq+1, end, p.allowFullwidthSpace) >= trimInputRight(p.src, eq+1, end, p.allowFullwidthSpace) {
+		if erabasic.TrimInputLeft(p.Src, base+bodyStart, eq, p.AllowFullwidthSpace) >= erabasic.TrimInputRight(p.Src, base+bodyStart, eq, p.AllowFullwidthSpace) || erabasic.TrimInputLeft(p.Src, eq+1, end, p.AllowFullwidthSpace) >= erabasic.TrimInputRight(p.Src, eq+1, end, p.AllowFullwidthSpace) {
 			if p.expressionParseEnabled() && modifierKnown {
 				p.warning(i, eq+1, "suspicious_initializer", "declaration initializer is empty")
 			}
 			return fail()
 		}
 		if p.rules[DeclarationDefaultSpacing] {
-			p.addEdit(i, trimInputRight(p.src, base+bodyStart, eq, p.allowFullwidthSpace), eq, []byte{' '}, DeclarationDefaultSpacing)
-			p.addEdit(i, eq+1, trimInputLeft(p.src, eq+1, end, p.allowFullwidthSpace), []byte{' '}, DeclarationDefaultSpacing)
+			p.addEdit(i, erabasic.TrimInputRight(p.Src, base+bodyStart, eq, p.AllowFullwidthSpace), eq, []byte{' '}, DeclarationDefaultSpacing)
+			p.addEdit(i, eq+1, erabasic.TrimInputLeft(p.Src, eq+1, end, p.AllowFullwidthSpace), []byte{' '}, DeclarationDefaultSpacing)
 		}
 		if !p.syntaxDeclarationInitializerExpression(i, eq+1, end) {
 			return fail()
 		}
 	}
 	if p.expressionParseEnabled() && modifierKnown {
-		if message := declarationModifierIssue(p.kind, modifiers); message != "" {
+		if message := modifierAnalysis.Issue; message != "" {
 			p.syntaxProblem(i, base+wordEnd, message)
 			return fail()
 		}
-		if !hasEqual && modifiers.isConst {
+		if !hasEqual && modifiers.IsConst {
 			p.warning(i, base+bodyStart, "suspicious_initializer", "CONST declaration has no initializer; macro expansion may change its role")
 			return fail()
 		}
-		if hasEqual && declarationInitializerSuspicious(p, i, name == "DIMS", modifiers, p.src, base+bodyStart, leftEnd, eq+1, end) {
+		if hasEqual && declarationInitializerSuspicious(p, i, name == "DIMS", modifiers, p.Src, base+bodyStart, leftEnd, eq+1, end) {
 			return fail()
 		}
 	}
-	allowRefOmittedDimensions := p.kind == ERB && p.base > 0 && p.state.declarations && !hasEqual && declarationModifiersAllowRefOmissionWithSpace(p.src, base+wordEnd, base+bodyStart, p.allowFullwidthSpace)
+	allowRefOmittedDimensions := p.Kind == erabasic.ERB && p.Base > 0 && p.State.Declarations && !hasEqual && erabasic.DeclarationModifiersAllowRefOmissionWithSpace(p.Src, base+wordEnd, base+bodyStart, p.AllowFullwidthSpace)
 	initializerStart, initializerEnd := -1, -1
 	if hasEqual {
 		initializerStart, initializerEnd = eq+1, end
@@ -299,429 +277,49 @@ func (p *formatter) syntaxDeclaration(i int, head []byte, base int) int {
 
 func (p *formatter) syntaxDeclarationInitializerExpression(i, start, end int) bool {
 	if p.expressionParseEnabled() {
-		tokens, err := p.lexSyntaxRange(start, end)
-		if err == nil && !expressionNeedsDeferral(tokens, p.dialect) {
-			if shapeErr := provenExpressionShape(tokens, p.dialect, false); shapeErr != nil {
-				p.expressionProblem(i, start, shiftExpressionError(shapeErr, -start))
-				return false
-			}
+		if shapeErr := p.semanticContext().DeclarationInitializerShapeIssue(start, end); shapeErr != nil {
+			p.expressionProblem(i, start, erabasic.ShiftExpressionError(shapeErr, -start))
+			return false
 		}
 	}
 	return p.syntaxExpression(i, start, end, false)
-}
-
-type localSizeConstantStatus uint8
-
-const (
-	localSizeConstantUnknown localSizeConstantStatus = iota
-	localSizeConstantValid
-	localSizeConstantInvalid
-)
-
-func localSizeConstantProof(tokens []exprToken) (localSizeConstantStatus, int64) {
-	if len(tokens) == 0 || len(tokens) > 4096 {
-		return localSizeConstantUnknown, 0
-	}
-	depth := 0
-	hasString := false
-	for _, token := range tokens {
-		switch token.kind {
-		case exprIdentifier, exprForm, exprMarker:
-			return localSizeConstantUnknown, 0
-		case exprString:
-			hasString = true
-		case exprNumber:
-			if _, ok := numericLiteralValue(token.text); !ok {
-				return localSizeConstantUnknown, 0
-			}
-		case exprOperator:
-			op := string(token.text)
-			if constantPriority(op) == 0 && op != "+" && op != "-" && op != "!" && op != "~" {
-				return localSizeConstantInvalid, 0
-			}
-		case exprSymbol:
-			switch string(token.text) {
-			case "(":
-				depth++
-				if depth > 256 {
-					return localSizeConstantUnknown, 0
-				}
-			case ")":
-				if depth == 0 {
-					return localSizeConstantInvalid, 0
-				}
-				depth--
-			default:
-				return localSizeConstantInvalid, 0
-			}
-		default:
-			return localSizeConstantUnknown, 0
-		}
-	}
-	if depth != 0 {
-		return localSizeConstantInvalid, 0
-	}
-	valueType, valid, known := constantExpressionType(tokens)
-	if !known || !valid || valueType != knownValueNumeric {
-		return localSizeConstantInvalid, 0
-	}
-	if hasString {
-		return localSizeConstantUnknown, 0
-	}
-	value, ok := constantIntegerValue(tokens)
-	if !ok {
-		return localSizeConstantInvalid, 0
-	}
-	return localSizeConstantValid, value
-}
-
-func functionStyleDefine(head []byte) bool {
-	wordEnd := declarationWordEnd(head)
-	if wordEnd != len("#DEFINE") || !bytes.Equal(head[:wordEnd], []byte("#DEFINE")) {
-		return false
-	}
-	pos := wordEnd
-	for pos < len(head) {
-		size := inputSpaceSize(head, pos, false)
-		if size == 0 {
-			break
-		}
-		pos += size
-	}
-	nameEnd := expressionIdentifierEnd(head, pos)
-	return nameEnd > pos && nameEnd < len(head) && head[nameEnd] == '(' && !bytes.Contains(head, []byte("[["))
 }
 
 func (p *formatter) syntaxObjectDefine(i int, head []byte, base int) {
 	if !p.rules[DeclarationWordSpacing] || len(head) < len("#DEFINE") || !bytes.Equal(head[:len("#DEFINE")], []byte("#DEFINE")) {
 		return
 	}
-	line := p.lines[i]
-	if bytes.IndexByte(p.src[line.start:line.bodyEnd], 0) >= 0 || bytes.IndexByte(head, 0) >= 0 || bytes.Contains(head, []byte("[[")) || bytes.Contains(head, []byte(";!;")) || bytes.Contains(head, []byte(";#;")) {
+	line := p.Lines[i]
+	analysis := p.semanticContext().ObjectDefineAnalysis(head, p.Src[line.Start:line.BodyEnd], base)
+	if !analysis.Valid {
 		return
 	}
-	wordEnd := len("#DEFINE")
-	nameStart := wordEnd
-	for nameStart < len(head) {
-		size := inputSpaceSize(head, nameStart, p.allowFullwidthSpace)
-		if size == 0 {
-			break
-		}
-		nameStart += size
-	}
-	if nameStart == wordEnd || nameStart >= len(head) {
-		return
-	}
-	nameEnd := expressionIdentifierEnd(head, nameStart)
-	if nameEnd == nameStart || nameEnd < 0 {
-		return
-	}
-	tokens, err := p.lexSyntaxRange(base+nameStart, base+nameEnd)
-	if err != nil || len(tokens) != 1 || tokens[0].kind != exprIdentifier {
-		return
-	}
-	if nameEnd < len(head) && head[nameEnd] == '(' {
-		return
-	}
-	if nameEnd < len(head) && inputSpaceSize(head, nameEnd, p.allowFullwidthSpace) == 0 {
-		return
-	}
-	p.addEdit(i, base+wordEnd, base+nameStart, []byte{' '}, DeclarationWordSpacing)
-	if nameEnd >= len(head) {
-		return
-	}
-	bodyStart := nameEnd
-	for bodyStart < len(head) {
-		size := inputSpaceSize(head, bodyStart, p.allowFullwidthSpace)
-		if size == 0 {
-			break
-		}
-		bodyStart += size
-	}
-	if bodyStart == nameEnd || bodyStart >= len(head) {
-		return
-	}
-	p.addEdit(i, base+nameEnd, base+bodyStart, []byte{' '}, DeclarationWordSpacing)
+	p.addEdit(i, base+analysis.WordEnd, base+analysis.NameStart, []byte{' '}, DeclarationWordSpacing)
+	p.addEdit(i, base+analysis.NameEnd, base+analysis.BodyStart, []byte{' '}, DeclarationWordSpacing)
 }
 
-type declarationModifierSet struct {
-	isConst bool
-	dynamic bool
-	static  bool
-	save    bool
-	chara   bool
-	ref     bool
-	global  bool
-	issue   string
+func declarationInitializerSuspicious(p *formatter, line int, stringType bool, modifiers erabasic.DeclarationModifierSet, src []byte, fieldsStart, fieldsEnd, initStart, initEnd int) bool {
+	return p.declarationInitializerSuspicious(line, stringType, modifiers, fieldsStart, fieldsEnd, initStart, initEnd)
 }
 
-func declarationModifierInfo(src []byte, start, end int, allowFullwidthSpace bool) (declarationModifierSet, bool) {
-	var modifiers declarationModifierSet
-	for start < end {
-		for start < end {
-			size := inputSpaceSize(src, start, allowFullwidthSpace)
-			if size == 0 {
-				break
-			}
-			start += size
-		}
-		if start >= end {
-			return modifiers, true
-		}
-		wordEnd := asciiWordEnd(src, start)
-		if wordEnd == start || wordEnd > end {
-			return declarationModifierSet{}, false
-		}
-		switch string(bytes.ToUpper(src[start:wordEnd])) {
-		case "CONST":
-			if modifiers.isConst {
-				modifiers.issue = "CONST modifier is duplicated"
-			}
-			modifiers.isConst = true
-		case "DYNAMIC":
-			if modifiers.dynamic {
-				modifiers.issue = "DYNAMIC modifier is duplicated"
-			}
-			modifiers.dynamic = true
-		case "STATIC":
-			if modifiers.static {
-				modifiers.issue = "STATIC modifier is duplicated"
-			}
-			modifiers.static = true
-		case "SAVEDATA":
-			if modifiers.save {
-				modifiers.issue = "SAVEDATA modifier is duplicated"
-			}
-			modifiers.save = true
-		case "CHARADATA":
-			if modifiers.chara {
-				modifiers.issue = "CHARADATA modifier is duplicated"
-			}
-			modifiers.chara = true
-		case "REF":
-			if modifiers.ref {
-				modifiers.issue = "REF modifier is duplicated"
-			}
-			modifiers.ref = true
-		case "GLOBAL":
-			modifiers.global = true
-		default:
-			return declarationModifierSet{}, false
-		}
-		start = wordEnd
-	}
-	return modifiers, true
+func declarationInitializerDimensionsKnown(p *formatter, spans []erabasic.SyntaxSpan) bool {
+	return p.semanticContext().DeclarationInitializerDimensionsKnown(spans)
 }
 
-func declarationModifierIssue(kind Kind, modifiers declarationModifierSet) string {
-	if modifiers.issue != "" {
-		return modifiers.issue
-	}
-	if kind == ERB {
-		if modifiers.global {
-			return "GLOBAL is not valid for a local declaration"
-		}
-		if modifiers.save {
-			return "SAVEDATA is not valid for a local declaration"
-		}
-		if modifiers.chara {
-			return "CHARADATA is not valid for a local declaration"
-		}
-	} else {
-		if modifiers.dynamic {
-			return "DYNAMIC is not valid for a global declaration"
-		}
-		if modifiers.static {
-			return "STATIC is not valid for a global declaration"
-		}
-	}
-	if modifiers.isConst && (modifiers.dynamic || modifiers.save || modifiers.chara || modifiers.ref || modifiers.global) {
-		return "CONST modifier conflicts with another declaration modifier"
-	}
-	if modifiers.ref && (modifiers.static || modifiers.save || modifiers.chara || modifiers.global || modifiers.isConst) {
-		return "REF modifier conflicts with another declaration modifier"
-	}
-	if modifiers.dynamic && modifiers.static {
-		return "DYNAMIC and STATIC modifiers conflict"
-	}
-	if modifiers.static && (modifiers.save || modifiers.chara || modifiers.global) {
-		return "STATIC modifier conflicts with another declaration modifier"
-	}
-	if modifiers.dynamic && modifiers.chara {
-		return "DYNAMIC modifier conflicts with CHARADATA"
-	}
-	if modifiers.chara && modifiers.global {
-		return "CHARADATA modifier conflicts with GLOBAL"
-	}
-	return ""
+func declarationInitializerSize(p *formatter, spans []erabasic.SyntaxSpan) (bool, int64) {
+	return p.semanticContext().DeclarationInitializerSize(spans)
 }
 
-func declarationInitializerSuspicious(p *formatter, line int, stringType bool, modifiers declarationModifierSet, src []byte, fieldsStart, fieldsEnd, initStart, initEnd int) bool {
-	if modifiers.ref {
-		p.warning(line, initStart, "suspicious_initializer", "reference declaration cannot have an initializer")
-		return true
-	}
-	if modifiers.chara {
-		p.warning(line, initStart, "suspicious_initializer", "CHARADATA declaration cannot have an initializer")
-		return true
-	}
-	dimensions := p.splitTopLevel(src, fieldsStart, fieldsEnd, ',')
-	if len(dimensions) > 1 && !declarationInitializerDimensionsKnown(p, dimensions[1:]) {
-		return false
-	}
-	initializer := p.declarationInitializerFields(initStart, initEnd)
-	if len(initializer) == 0 {
-		p.warning(line, initStart, "suspicious_initializer", "declaration initializer is empty")
-		return true
-	}
-	expected := knownValueNumeric
-	if stringType {
-		expected = knownValueString
-	}
-	for _, field := range initializer {
-		left := trimInputLeft(src, field.start, field.end, p.allowFullwidthSpace)
-		right := trimInputRight(src, left, field.end, p.allowFullwidthSpace)
-		if left == right {
-			p.warning(line, field.start, "suspicious_initializer", "initializer contains an empty value")
-			return true
-		}
-		tokens, err := p.lexSyntaxRange(left, right)
-		if err != nil || commandMacroPossible(tokens) {
-			return false
-		}
-		actual := declarationInitializerType(tokens)
-		if actual == knownValueUnknown {
-			return false
-		}
-		if actual != expected {
-			p.warning(line, left, "suspicious_initializer", "initializer type does not match declaration type; macro expansion may change its role")
-			return true
-		}
-	}
-	if len(dimensions) > 1 {
-		knownSize, size := declarationInitializerSize(p, dimensions[1:])
-		if !knownSize {
-			return false
-		}
-		if len(dimensions)-1 >= 2 {
-			p.warning(line, initStart, "suspicious_initializer", "multi-dimensional declaration cannot have an initializer; macro expansion may change its role")
-			return true
-		}
-		if size > 0 && (int64(len(initializer)) > size || modifiers.isConst && int64(len(initializer)) != size) {
-			p.warning(line, initStart, "suspicious_initializer", "initializer count does not match the declaration size; macro expansion may change its role")
-			return true
-		}
-	}
-	return false
+func (p *formatter) declarationInitializerFields(start, end int) []erabasic.SyntaxSpan {
+	return p.semanticContext().DeclarationInitializerFields(start, end)
 }
 
-func declarationInitializerDimensionsKnown(p *formatter, spans []syntaxSpan) bool {
-	for _, span := range spans {
-		left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-		if left == right {
-			return false
-		}
-		tokens, err := p.lexSyntaxRange(left, right)
-		if err != nil || commandMacroPossible(tokens) {
-			return false
-		}
-	}
-	return true
-}
-
-func declarationInitializerType(tokens []exprToken) knownValueType {
-	value, valid, known := constantExpressionType(tokens)
-	if known && valid {
-		return value
-	}
-	return knownValueUnknown
-}
-
-func declarationInitializerSize(p *formatter, spans []syntaxSpan) (bool, int64) {
-	if len(spans) == 0 {
-		return true, 0
-	}
-	if len(spans) > 1 {
-		for _, span := range spans {
-			left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-			right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-			tokens, err := p.lexSyntaxRange(left, right)
-			if err != nil || commandMacroPossible(tokens) {
-				return false, 0
-			}
-			if _, valid := constantIntegerValue(tokens); !valid {
-				return false, 0
-			}
-		}
-		return true, 0
-	}
-	left := trimInputLeft(p.src, spans[0].start, spans[0].end, p.allowFullwidthSpace)
-	right := trimInputRight(p.src, left, spans[0].end, p.allowFullwidthSpace)
-	tokens, err := p.lexSyntaxRange(left, right)
-	if err != nil || commandMacroPossible(tokens) {
-		return false, 0
-	}
-	value, valid := constantIntegerValue(tokens)
-	return valid, value
-}
-
-func (p *formatter) declarationInitializerFields(start, end int) []syntaxSpan {
-	fields := p.splitTopLevel(p.src, start, end, ',')
-	if len(fields) > 1 {
-		left, right := extraFieldBoundsWithSpace(p.src, fields[len(fields)-1], p.allowFullwidthSpace)
-		if left == right {
-			return fields[:len(fields)-1]
-		}
-	}
-	return fields
-}
-
-func declarationMacroNameSpan(p *formatter, span syntaxSpan) bool {
-	left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-	right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-	tokens, err := p.lexSyntaxRange(left, right)
-	if err != nil || len(tokens) < 2 || tokens[0].kind != exprIdentifier {
-		return false
-	}
-	for _, token := range tokens {
-		if token.kind != exprIdentifier {
-			return false
-		}
-	}
-	name := string(bytes.ToUpper(tokens[0].text))
-	if setterKnownNameForDialect(tokens[0].text, p.dialect) || reservedInstructions[name] && !commandUnavailable(name, p.dialect) {
-		return false
-	}
-	mask, ok := builtinMethodMasks[name]
-	return !ok || !methodDialect(mask, p.dialect)
+func declarationMacroNameSpan(p *formatter, span erabasic.SyntaxSpan) bool {
+	return p.semanticContext().DeclarationMacroNameSpan(span)
 }
 
 func declarationReservedName(p *formatter, start, end int) bool {
-	spans := p.splitTopLevel(p.src, start, end, ',')
-	if len(spans) == 0 {
-		return false
-	}
-	left := trimInputLeft(p.src, spans[0].start, spans[0].end, p.allowFullwidthSpace)
-	right := trimInputRight(p.src, left, spans[0].end, p.allowFullwidthSpace)
-	tokens, err := p.lexSyntaxRange(left, right)
-	if err != nil || len(tokens) != 1 || tokens[0].kind != exprIdentifier || !bytes.Equal(tokens[0].text, bytes.ToUpper(tokens[0].text)) {
-		return false
-	}
-	name := string(tokens[0].text)
-	if reservedInstructions[name] && !commandUnavailable(name, p.dialect) || setterKnownNameForDialect(tokens[0].text, p.dialect) {
-		return true
-	}
-	if reservedDeclarationNames[name] {
-		return true
-	}
-	mask, ok := builtinMethodMasks[name]
-	return ok && methodDialect(mask, p.dialect)
-}
-
-var reservedDeclarationNames = map[string]bool{
-	"IS": true, "TO": true, "INT": true, "REFFUNC": true,
-	"PRIVATE": true, "__DEBUG__": true, "__SKIP__": true, "_": true,
+	return p.semanticContext().DeclarationReservedName(start, end)
 }
 
 func (p *formatter) eventFunction() bool {
@@ -730,21 +328,21 @@ func (p *formatter) eventFunction() bool {
 }
 
 func (p *formatter) eventFunctionStatus() (bool, bool) {
-	if p.kind != ERB {
+	if p.Kind != erabasic.ERB {
 		return false, false
 	}
-	if p.functionName != "" {
-		return p.eventFunctionKnown, p.eventFunctionExact
+	if p.FunctionName != "" {
+		return p.EventFunctionKnown, p.EventFunctionExact
 	}
-	if p.functionStart < 0 || p.functionStart >= len(p.lines) {
+	if p.FunctionStart < 0 || p.FunctionStart >= len(p.Lines) {
 		return false, false
 	}
-	head, _, _, _ := p.headOf(lBody(p.src, p.lines[p.functionStart]))
-	start := trimInputLeft(head, 1, len(head), p.allowFullwidthSpace)
-	end, _ := headerPrefix(head, start)
-	end = trimInputRight(head, start, end, p.allowFullwidthSpace)
+	head, _, _, _ := p.headOf(erabasic.LBody(p.Src, p.Lines[p.FunctionStart]))
+	start := erabasic.TrimInputLeft(head, 1, len(head), p.AllowFullwidthSpace)
+	end, _ := erabasic.HeaderPrefix(head, start)
+	end = erabasic.TrimInputRight(head, start, end, p.AllowFullwidthSpace)
 	name := string(head[start:end])
-	return eventFunctionContext(name)
+	return erabasic.EventFunctionContext(name)
 }
 
 func (p *formatter) addDeclarationWordGaps(i int, head []byte, base, wordEnd int, bodyStart *int) {
@@ -753,14 +351,14 @@ func (p *formatter) addDeclarationWordGaps(i int, head []byte, base, wordEnd int
 		p.addEdit(i, base+wordEnd, base+pos, []byte{' '}, DeclarationWordSpacing)
 	}
 	for {
-		wordEnd := asciiWordEnd(head, pos)
-		separator := wordEnd < len(head) && inputSpaceAt(head, wordEnd, p.allowFullwidthSpace)
-		if wordEnd == pos || wordEnd < len(head) && !separator && !isDelimiter(rune(head[wordEnd])) || !declarationModifier(string(bytes.ToUpper(head[pos:wordEnd]))) {
+		wordEnd := erabasic.AsciiWordEnd(head, pos)
+		separator := wordEnd < len(head) && erabasic.InputSpaceAt(head, wordEnd, p.AllowFullwidthSpace)
+		if wordEnd == pos || wordEnd < len(head) && !separator && !erabasic.IsDelimiter(rune(head[wordEnd])) || !erabasic.DeclarationModifier(string(bytes.ToUpper(head[pos:wordEnd]))) {
 			break
 		}
 		next := wordEnd
 		for next < len(head) {
-			size := inputSpaceSize(head, next, p.allowFullwidthSpace)
+			size := erabasic.InputSpaceSize(head, next, p.AllowFullwidthSpace)
 			if size == 0 {
 				break
 			}
@@ -775,121 +373,46 @@ func (p *formatter) addDeclarationWordGaps(i int, head []byte, base, wordEnd int
 }
 
 func (p *formatter) syntaxDeclarationDimensions(i, modifiersStart, start, end int, allowRefOmitted bool, initializerStart, initializerEnd int, stringType bool) bool {
-	spans := p.splitTopLevel(p.src, start, end, ',')
-	modifiers, modifiersKnown := declarationModifierInfo(p.src, modifiersStart, start, p.allowFullwidthSpace)
+	spans := p.semanticContext().SplitTopLevel(p.Src, start, end, ',')
+	modifiers, modifiersKnown := erabasic.DeclarationModifierInfo(p.Src, modifiersStart, start, p.AllowFullwidthSpace)
 	if declarationMacroNameSpan(p, spans[0]) {
 		return false
 	}
-	left := trimInputLeft(p.src, spans[0].start, spans[0].end, p.allowFullwidthSpace)
-	right := trimInputRight(p.src, left, spans[0].end, p.allowFullwidthSpace)
-	name, err := p.lexSyntaxRange(left, right)
-	if err != nil || len(name) != 1 || name[0].kind != exprIdentifier {
+	left := erabasic.TrimInputLeft(p.Src, spans[0].Start, spans[0].End, p.AllowFullwidthSpace)
+	right := erabasic.TrimInputRight(p.Src, left, spans[0].End, p.AllowFullwidthSpace)
+	name, err := p.semanticContext().LexSyntaxRange(left, right)
+	identifier := erabasic.AnalyzeDeclarationIdentifier(name)
+	if err != nil || !identifier.Valid {
 		p.syntaxProblem(i, start, "declaration requires an identifier before its dimensions or initializer")
 		return false
 	}
-	hasOmitted := false
 	for _, span := range spans[1:] {
-		if trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace) >= trimInputRight(p.src, span.start, span.end, p.allowFullwidthSpace) {
-			hasOmitted = true
+		if erabasic.TrimInputLeft(p.Src, span.Start, span.End, p.AllowFullwidthSpace) >= erabasic.TrimInputRight(p.Src, span.Start, span.End, p.AllowFullwidthSpace) {
 			continue
 		}
-		if !p.syntaxExpression(i, span.start, span.end, false) {
+		if !p.syntaxExpression(i, span.Start, span.End, false) {
 			return false
 		}
 	}
-	if p.expressionParseEnabled() && p.kind == ERH && modifiersKnown && modifiers.chara {
-		if third, ok := declarationCharadataDimensionsProven(p, spans); ok {
-			p.warning(i, third.start, "suspicious_dimension", "CHARADATA declarations support at most two dimensions; macro expansion may change its role")
-			return false
+	checks := p.semanticContext().DeclarationDimensionChecks(spans, modifiersStart, start, end, allowRefOmitted, p.expressionParseEnabled(), erabasic.DeclarationKind(p.Kind), modifiers, modifiersKnown, initializerStart, initializerEnd, stringType)
+	for _, issue := range checks.Issues {
+		if issue.Severity == erabasic.DeclarationDiagnosticWarning {
+			p.warning(i, issue.Offset, issue.Code, issue.Message)
+		} else {
+			p.syntaxProblem(i, issue.Offset, issue.Message)
 		}
 	}
-	skipDirectValidation := declarationHasRefModifier(p.src, modifiersStart, start, p.allowFullwidthSpace) && !allowRefOmitted
-	if p.expressionParseEnabled() && !skipDirectValidation {
-		total := int64(1)
-		dimensionCount := 0
-		capacityKnown := true
-		for _, span := range spans[1:] {
-			left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-			right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-			if left == right {
-				continue
-			}
-			tokens, err := p.lexSyntaxRange(left, right)
-			if err != nil {
-				continue
-			}
-			if commandMacroPossible(tokens) {
-				break
-			}
-			dimensionCount++
-			if !allowRefOmitted && dimensionCount > 3 {
-				p.warning(i, left, "suspicious_dimension", "declaration has more than three dimensions; macro expansion may change its role")
-				return false
-			}
-			value, kind := directIntegerLiteral(tokens)
-			if kind == knownValueUnknown {
-				capacityKnown = false
-				continue
-			}
-			if kind == knownValueString {
-				if allowRefOmitted {
-					p.syntaxProblem(i, left, "reference declaration dimensions must be omitted or zero")
-				} else {
-					p.warning(i, left, "suspicious_dimension", "string literal in a dimension field; macro expansion may change its role")
-				}
-				return false
-			}
-			if allowRefOmitted {
-				if value != 0 {
-					p.syntaxProblem(i, left, "reference declaration dimensions must be omitted or zero")
-					return false
-				}
-				continue
-			}
-			if value <= 0 || value > 1000000 {
-				p.warning(i, left, "suspicious_dimension", "literal is outside dimension range 1..1000000; macro expansion may change its role")
-				return false
-			}
-			if capacityKnown && total > 1000000/value {
-				p.warning(i, left, "suspicious_dimension", "declaration exceeds the total dimension capacity of 1000000; macro expansion may change its role")
-				return false
-			}
-			total *= value
-		}
+	if checks.Reject {
+		return false
 	}
-	if hasOmitted {
-		if !allowRefOmitted || len(spans)-1 > 3 {
-			if p.expressionParseEnabled() && declarationOmittedDimensionProvenOrdinary(p, spans, modifiersStart, start) {
-				for _, span := range spans[1:] {
-					left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-					right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-					if left == right {
-						p.syntaxProblem(i, span.start, "ordinary declaration dimensions cannot be omitted")
-						break
-					}
-				}
-			}
-			return false
-		}
-		for _, span := range spans[1:] {
-			left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-			right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-			if left == right {
-				continue
-			}
-			if !p.literalZero(left, right) {
-				return false
-			}
-		}
-	}
-	valuesProven := modifiersKnown && declarationModifierIssue(p.kind, modifiers) == "" && declarationValuesProven(p, start, end, initializerStart, initializerEnd, stringType, modifiers)
-	if p.kind == ERH && valuesProven {
+	valuesProven := checks.ValuesProven
+	if p.Kind == erabasic.ERH && valuesProven {
 		if !p.registerGlobalDeclaration(i, left, name) {
 			return false
 		}
 	}
-	if p.kind == ERB && p.base > 0 && valuesProven {
-		if !p.registerPrivateDeclaration(i, left, string(name[0].text)) {
+	if p.Kind == erabasic.ERB && p.Base > 0 && valuesProven {
+		if !p.registerPrivateDeclaration(i, left, identifier.Name) {
 			return false
 		}
 	}
@@ -897,216 +420,30 @@ func (p *formatter) syntaxDeclarationDimensions(i, modifiersStart, start, end in
 	return true
 }
 
-func (p *formatter) privateDeclarationNameMacroPossible(spans []syntaxSpan) bool {
-	if len(spans) == 0 {
-		return false
-	}
-	left := trimInputLeft(p.src, spans[0].start, spans[0].end, p.allowFullwidthSpace)
-	right := trimInputRight(p.src, left, spans[0].end, p.allowFullwidthSpace)
-	tokens, err := p.lexSyntaxRange(left, right)
-	if err != nil || len(tokens) != 1 || tokens[0].kind != exprIdentifier {
-		return false
-	}
-	r, _ := utf8.DecodeRune(tokens[0].text)
-	return r <= 0xffff && unicode.IsDigit(r) && (r < '0' || r > '9')
+func (p *formatter) privateDeclarationNameMacroPossible(spans []erabasic.SyntaxSpan) bool {
+	return p.semanticContext().PrivateDeclarationNameMacroPossible(spans)
 }
 
-func declarationOmittedDimensionProvenOrdinary(p *formatter, spans []syntaxSpan, modifiersStart, start int) bool {
-	modifiers, known := declarationModifierInfo(p.src, modifiersStart, start, p.allowFullwidthSpace)
-	if known && modifiers.ref {
-		return false
-	}
-	forcedOrdinary := known && (modifiers.isConst || modifiers.static || modifiers.save || modifiers.chara || modifiers.global)
-	positive := false
-	for _, span := range spans[1:] {
-		left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-		if left == right {
-			continue
-		}
-		tokens, err := p.lexSyntaxRange(left, right)
-		if err != nil || commandMacroPossible(tokens) {
-			return false
-		}
-		value, valid := constantIntegerValue(tokens)
-		if !valid {
-			return false
-		}
-		if value <= 0 {
-			return false
-		}
-		positive = true
-	}
-	return positive || forcedOrdinary
+func declarationOmittedDimensionProvenOrdinary(p *formatter, spans []erabasic.SyntaxSpan, modifiersStart, start int) bool {
+	return p.semanticContext().DeclarationOmittedDimensionProvenOrdinary(spans, modifiersStart, start)
 }
 
-func declarationCharadataDimensionsProven(p *formatter, spans []syntaxSpan) (syntaxSpan, bool) {
-	count := 0
-	var third syntaxSpan
-	for _, span := range spans[1:] {
-		left := trimInputLeft(p.src, span.start, span.end, p.allowFullwidthSpace)
-		right := trimInputRight(p.src, left, span.end, p.allowFullwidthSpace)
-		if left == right {
-			return syntaxSpan{}, false
-		}
-		tokens, err := p.lexSyntaxRange(left, right)
-		if err != nil || commandMacroPossibleForDialect(tokens, p.dialect) {
-			return syntaxSpan{}, false
-		}
-		value, kind := directIntegerLiteral(tokens)
-		if kind != knownValueNumeric || value <= 0 {
-			return syntaxSpan{}, false
-		}
-		count++
-		if count == 3 {
-			third = span
-		}
-	}
-	return third, count > 2
+func declarationCharadataDimensionsProven(p *formatter, spans []erabasic.SyntaxSpan) (erabasic.SyntaxSpan, bool) {
+	return p.semanticContext().DeclarationCharadataDimensionsProven(spans)
 }
 
-func declarationValuesProven(p *formatter, start, end, initializerStart, initializerEnd int, stringType bool, modifiers declarationModifierSet) bool {
-	fields := p.splitTopLevel(p.src, start, end, ',')
-	if len(fields) > 4 {
-		return false
-	}
-	total := int64(1)
-	for _, field := range fields[1:] {
-		left, right := extraFieldBoundsWithSpace(p.src, field, p.allowFullwidthSpace)
-		if left == right && modifiers.ref {
-			continue
-		}
-		tokens, err := p.lexSyntaxRange(left, right)
-		if err != nil {
-			return false
-		}
-		value, valid := constantIntegerValue(tokens)
-		if !valid {
-			return false
-		}
-		if modifiers.ref {
-			if value != 0 {
-				return false
-			}
-			continue
-		}
-		if value <= 0 || value > 1000000 || total > 1000000/value {
-			return false
-		}
-		total *= value
-	}
-	if initializerStart < 0 {
-		return !modifiers.isConst
-	}
-	if modifiers.ref || modifiers.chara || len(fields) > 2 {
-		return false
-	}
-	initializer := p.declarationInitializerFields(initializerStart, initializerEnd)
-	count := int64(len(initializer))
-	if count > 1000000 || len(fields) == 2 && (count > total || modifiers.isConst && count != total) {
-		return false
-	}
-	for _, field := range initializer {
-		left, right := extraFieldBoundsWithSpace(p.src, field, p.allowFullwidthSpace)
-		tokens, err := p.lexSyntaxRange(left, right)
-		if err != nil {
-			return false
-		}
-		if stringType {
-			for len(tokens) >= 3 && string(tokens[0].text) == "(" && string(tokens[len(tokens)-1].text) == ")" {
-				tokens = tokens[1 : len(tokens)-1]
-			}
-			if len(tokens) != 1 || tokens[0].kind != exprString {
-				return false
-			}
-		} else if _, valid := constantIntegerValue(tokens); !valid {
-			return false
-		}
-	}
-	return true
-}
-
-func declarationHasRefModifier(src []byte, start, end int, allowFullwidthSpace bool) bool {
-	for start < end {
-		for start < end {
-			size := inputSpaceSize(src, start, allowFullwidthSpace)
-			if size == 0 {
-				break
-			}
-			start += size
-		}
-		if start >= end {
-			return false
-		}
-		wordEnd := asciiWordEnd(src, start)
-		if wordEnd == start || wordEnd > end {
-			return false
-		}
-		word := string(bytes.ToUpper(src[start:wordEnd]))
-		if word == "REF" {
-			if wordEnd == end || inputSpaceSize(src, wordEnd, allowFullwidthSpace) != 0 || isDelimiter(rune(src[wordEnd])) {
-				return true
-			}
-			return false
-		}
-		if !declarationModifier(word) || wordEnd >= end || inputSpaceSize(src, wordEnd, allowFullwidthSpace) == 0 {
-			return false
-		}
-		start = wordEnd
-	}
-	return false
-}
-
-func declarationModifiersAllowRefOmissionWithSpace(src []byte, start, end int, allowFullwidthSpace bool) bool {
-	hasRef := false
-	hasDynamic := false
-	for start < end {
-		for start < end {
-			size := inputSpaceSize(src, start, allowFullwidthSpace)
-			if size == 0 {
-				break
-			}
-			start += size
-		}
-		if start >= end {
-			break
-		}
-		wordEnd := asciiWordEnd(src, start)
-		if wordEnd == start || wordEnd > end {
-			return false
-		}
-		switch string(bytes.ToUpper(src[start:wordEnd])) {
-		case "REF":
-			if hasRef {
-				return false
-			}
-			hasRef = true
-		case "DYNAMIC":
-			if hasDynamic {
-				return false
-			}
-			hasDynamic = true
-		default:
-			return false
-		}
-		start = wordEnd
-	}
-	return hasRef
+func declarationValuesProven(p *formatter, start, end, initializerStart, initializerEnd int, stringType bool, modifiers erabasic.DeclarationModifierSet) bool {
+	return p.semanticContext().DeclarationValuesProven(start, end, initializerStart, initializerEnd, stringType, modifiers)
 }
 
 func (p *formatter) literalZero(start, end int) bool {
-	tokens, err := p.lexSyntaxRange(start, end)
-	if err != nil {
-		return false
-	}
-	value, kind := directIntegerLiteral(tokens)
-	return kind == knownValueNumeric && value == 0
+	return p.semanticContext().DeclarationLiteralZero(start, end)
 }
 
 func (p *formatter) syntaxDeclarationCommas(i, start, end int) {
-	spans := p.splitTopLevel(p.src, start, end, ',')
+	spans := p.semanticContext().SplitTopLevel(p.Src, start, end, ',')
 	for _, span := range spans[:max(0, len(spans)-1)] {
-		p.syntaxCommaGap(i, span.end, end)
+		p.syntaxCommaGap(i, span.End, end)
 	}
 }
 
@@ -1115,76 +452,39 @@ func (p *formatter) syntaxDeclarationDelimiter(i, open, close int) {
 		return
 	}
 	innerStart, innerEnd := open+1, close
-	leftEnd := trimInputLeft(p.src, innerStart, innerEnd, p.allowFullwidthSpace)
-	rightStart := trimInputRight(p.src, innerStart, innerEnd, p.allowFullwidthSpace)
+	leftEnd := erabasic.TrimInputLeft(p.Src, innerStart, innerEnd, p.AllowFullwidthSpace)
+	rightStart := erabasic.TrimInputRight(p.Src, innerStart, innerEnd, p.AllowFullwidthSpace)
 	if leftEnd > rightStart {
 		p.addEdit(i, innerStart, innerEnd, nil, DelimiterSpacing)
 		return
 	}
-	if !mandatoryInlineMarker(p.src, leftEnd) {
+	if !erabasic.MandatoryInlineMarker(p.Src, leftEnd) {
 		p.addEdit(i, innerStart, leftEnd, nil, DelimiterSpacing)
 	}
-	if !mandatoryInlineMarker(p.src[:rightStart], rightStart-3) {
+	if !erabasic.MandatoryInlineMarker(p.Src[:rightStart], rightStart-3) {
 		p.addEdit(i, rightStart, innerEnd, nil, DelimiterSpacing)
 	}
 }
 
-func asciiWordEnd(src []byte, start int) int {
-	for start < len(src) && ((src[start] >= 'A' && src[start] <= 'Z') || (src[start] >= 'a' && src[start] <= 'z')) {
-		start++
-	}
-	return start
-}
-
-func declarationModifier(word string) bool {
-	switch word {
-	case "CONST", "DYNAMIC", "STATIC", "SAVEDATA", "CHARADATA", "REF", "GLOBAL":
+func (p *formatter) headerArgumentsValid(i int, head []byte, base int) bool {
+	if !p.expressionParseEnabled() {
 		return true
-	default:
+	}
+	session := p.SyntaxSession
+	if session == nil || !bytes.Equal(session.Sources[erabasic.ExpressionSourceOriginal], head) {
+		session = p.newExpressionSession(head)
+	}
+	start, end, ok := erabasic.HeaderArgumentRangeWithSession(head, session)
+	if !ok {
+		return true
+	}
+	for _, diagnostic := range erabasic.AnalyzeHeaderArgumentsWithSession(head, start, end, session, p.Dialect) {
+		if diagnostic.Severity == erabasic.DeclarationDiagnosticWarning {
+			p.warning(i, base+diagnostic.Offset, diagnostic.Code, diagnostic.Message)
+			continue
+		}
+		p.syntaxProblem(i, base+diagnostic.Offset, diagnostic.Message)
 		return false
 	}
-}
-
-func headerPrefix(head []byte, start int) (int, int) {
-	for i := start; i < len(head); i++ {
-		if head[i] == '[' || head[i] == '(' || head[i] == ',' || head[i] == ';' {
-			return i, i
-		}
-	}
-	return len(head), -1
-}
-
-func declarationName(head []byte) string {
-	if len(head) < 2 || head[0] != '#' {
-		return ""
-	}
-	end := declarationWordEnd(head)
-	if end < 0 {
-		return ""
-	}
-	return string(bytes.ToUpper(head[1:end]))
-}
-
-func declarationWordEnd(head []byte) int {
-	if len(head) < 2 || head[0] != '#' {
-		return -1
-	}
-	for pos := 1; pos < len(head); pos++ {
-		if halfSpace(head[pos]) || bytes.HasPrefix(head[pos:], fullwidthSpace) {
-			return pos
-		}
-		switch head[pos] {
-		case '.', '+', '-', '*', '/', '%', '=', '!', '<', '>', '|', '&', '^', '~', '#', '?', ')', '}', ']', ',', ':', '(', '{', '[', '$', '\\', '\'', '"', '@', ';':
-			return pos
-		}
-	}
-	return len(head)
-}
-
-func bareSharpFunction(head []byte, name string, allowFullwidthSpace bool) bool {
-	wordEnd := declarationWordEnd(head)
-	if wordEnd != len(name)+1 || !bytes.Equal(head[:wordEnd], []byte("#"+name)) {
-		return false
-	}
-	return len(trimInput(head[wordEnd:], allowFullwidthSpace)) == 0
+	return true
 }

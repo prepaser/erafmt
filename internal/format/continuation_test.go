@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestContinuationHeaderSemantics(t *testing.T) {
@@ -65,25 +67,22 @@ func TestContinuationOpenerTrailingWhitespaceKeepsGrammarBoundaries(t *testing.T
 func TestContinuationSourceUsesConfiguredSeparator(t *testing.T) {
 	separator := "|"
 	src := []byte("@F\n{\n  IF A>0\n  RETURN 1\n}\n")
-	p := formatter{src: src, lines: linesOf(src), continuationSeparator: &separator}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: src, Lines: linesOf(src), ContinuationSeparator: &separator}}
 	input, ok := p.collectContinuation(1)
 	if !ok {
 		t.Fatal("continuation not collected")
 	}
-	logical, segments := input.logical, input.segments
+	logical, segments := input.Logical, input.Segments
 	if string(logical) != "  IF A>0|  RETURN 1|" {
 		t.Fatalf("logical=%q", logical)
 	}
-	if len(segments) != 2 || segments[0].logicalStart != 0 || segments[0].logicalEnd != 8 || segments[1].logicalStart != 9 || segments[1].logicalEnd != 19 {
+	if len(segments) != 2 || segments[0].LogicalStart != 0 || segments[0].LogicalEnd != 8 || segments[1].LogicalStart != 9 || segments[1].LogicalEnd != 19 {
 		t.Fatalf("segments=%+v", segments)
 	}
 }
 
 func TestContinuationMappedEditsKeepPhysicalRows(t *testing.T) {
-	segments := []continuationSegment{
-		{logicalStart: 0, logicalEnd: 8, line: 1, sourceStart: 10, sourceEnd: 18, indent: 2},
-		{logicalStart: 9, logicalEnd: 18, line: 2, sourceStart: 20, sourceEnd: 29, indent: 2},
-	}
+	segments := []erabasic.ContinuationSegment{{LogicalStart: 0, LogicalEnd: 8, Line: 1, SourceStart: 10, SourceEnd: 18, Indent: 2}, {LogicalStart: 9, LogicalEnd: 18, Line: 2, SourceStart: 20, SourceEnd: 29, Indent: 2}}
 	edits := []edit{
 		{start: 2, end: 3, text: []byte("X"), change: Change{Rule: BinarySpacing}},
 		{start: 7, end: 10, text: []byte("Y"), change: Change{Rule: BinarySpacing}},
@@ -98,10 +97,10 @@ func TestContinuationMappedEditsKeepPhysicalRows(t *testing.T) {
 func TestContinuationAddSortedMappedEditsMapsRowsAndBoundaries(t *testing.T) {
 	src := []byte("prefix\nab\n\ncdef\nsuffix")
 	lines := linesOf(src)
-	segments := []continuationSegment{
-		{logicalStart: 0, logicalEnd: 2, line: 1, sourceStart: lines[1].start, sourceEnd: lines[1].bodyEnd},
-		{logicalStart: 3, logicalEnd: 3, line: 2, sourceStart: lines[2].start, sourceEnd: lines[2].bodyEnd},
-		{logicalStart: 4, logicalEnd: 8, line: 3, sourceStart: lines[3].start, sourceEnd: lines[3].bodyEnd},
+	segments := []erabasic.ContinuationSegment{
+		{LogicalStart: 0, LogicalEnd: 2, Line: 1, SourceStart: lines[1].Start, SourceEnd: lines[1].BodyEnd},
+		{LogicalStart: 3, LogicalEnd: 3, Line: 2, SourceStart: lines[2].Start, SourceEnd: lines[2].BodyEnd},
+		{LogicalStart: 4, LogicalEnd: 8, Line: 3, SourceStart: lines[3].Start, SourceEnd: lines[3].BodyEnd},
 	}
 	edits := []edit{
 		{start: 0, end: 1, text: []byte("Y"), change: Change{Rule: BinarySpacing}},
@@ -113,7 +112,7 @@ func TestContinuationAddSortedMappedEditsMapsRowsAndBoundaries(t *testing.T) {
 	for i := range wantInput {
 		wantInput[i].text = bytes.Clone(wantInput[i].text)
 	}
-	p := formatter{src: src, lines: lines, rules: ruleSet{BinarySpacing: true}, metadata: &metadataBudget{}}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: src, Lines: lines, Metadata: erabasic.NewMetadataBudget(0)}, rules: ruleSet{BinarySpacing: true}}
 	continuationAddSortedMappedEdits(&p, edits, segments)
 	if !reflect.DeepEqual(edits, wantInput) {
 		t.Fatalf("input edits mutated: got=%+v want=%+v", edits, wantInput)
@@ -122,10 +121,10 @@ func TestContinuationAddSortedMappedEditsMapsRowsAndBoundaries(t *testing.T) {
 		t.Fatalf("mapped edits=%+v, want four edits", p.edits)
 	}
 	want := []edit{
-		{start: lines[1].start, end: lines[1].start + 1, text: []byte("Y"), change: Change{Rule: BinarySpacing, Line: 2, Column: 1}},
-		{start: lines[1].bodyEnd, end: lines[1].bodyEnd, text: []byte("!"), change: Change{Rule: BinarySpacing, Line: 2, Column: 3}},
-		{start: lines[3].start + 1, end: lines[3].start + 2, text: []byte("X"), change: Change{Rule: BinarySpacing, Line: 4, Column: 2}},
-		{start: lines[3].bodyEnd, end: lines[3].bodyEnd, text: []byte("?"), change: Change{Rule: BinarySpacing, Line: 4, Column: 5}},
+		{start: lines[1].Start, end: lines[1].Start + 1, text: []byte("Y"), change: Change{Rule: BinarySpacing, Line: 2, Column: 1}},
+		{start: lines[1].BodyEnd, end: lines[1].BodyEnd, text: []byte("!"), change: Change{Rule: BinarySpacing, Line: 2, Column: 3}},
+		{start: lines[3].Start + 1, end: lines[3].Start + 2, text: []byte("X"), change: Change{Rule: BinarySpacing, Line: 4, Column: 2}},
+		{start: lines[3].BodyEnd, end: lines[3].BodyEnd, text: []byte("?"), change: Change{Rule: BinarySpacing, Line: 4, Column: 5}},
 	}
 	if !reflect.DeepEqual(p.edits, want) {
 		t.Fatalf("mapped edits=%+v want=%+v", p.edits, want)
@@ -135,17 +134,12 @@ func TestContinuationAddSortedMappedEditsMapsRowsAndBoundaries(t *testing.T) {
 func TestContinuationAddSortedMappedEditsPreservesNearBudgetAbort(t *testing.T) {
 	src := []byte("abc")
 	lines := linesOf(src)
-	segments := []continuationSegment{{logicalStart: 0, logicalEnd: 3, line: 0, sourceStart: lines[0].start, sourceEnd: lines[0].bodyEnd}}
+	segments := []erabasic.ContinuationSegment{{LogicalStart: 0, LogicalEnd: 3, Line: 0, SourceStart: lines[0].Start, SourceEnd: lines[0].BodyEnd}}
 	edits := []edit{{start: 1, end: 1, text: []byte("!"), change: Change{Rule: BinarySpacing}}}
-	p := formatter{
-		src:      src,
-		lines:    lines,
-		rules:    ruleSet{BinarySpacing: true},
-		metadata: &metadataBudget{used: maxMetadataBytes - 1},
-	}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: src, Lines: lines, Metadata: erabasic.NewMetadataBudget(erabasic.MaxMetadataBytes - 1)}, rules: ruleSet{BinarySpacing: true}}
 	continuationAddSortedMappedEdits(&p, edits, segments)
-	if !p.aborted || len(p.edits) != 0 || len(p.diagnostics) != 1 || p.diagnostics[0].Code != "resource_limit" || p.diagnostics[0].Severity != Error {
-		t.Fatalf("aborted=%t edits=%+v diagnostics=%+v metadata=%d", p.aborted, p.edits, p.diagnostics, p.metadata.used)
+	if !p.Aborted || len(p.edits) != 0 || len(p.diagnostics) != 1 || p.diagnostics[0].Code != "resource_limit" || p.diagnostics[0].Severity != Error {
+		t.Fatalf("aborted=%t edits=%+v diagnostics=%+v metadata=%d", p.Aborted, p.edits, p.diagnostics, p.Metadata.Used())
 	}
 }
 
@@ -155,13 +149,7 @@ func TestContinuationProxyFormatsOnlyExpressionSyntax(t *testing.T) {
 		t.Fatal(err)
 	}
 	separator := " "
-	p := formatter{
-		rules:                 rules,
-		kind:                  ERB,
-		state:                 state{declarations: false},
-		dialect:               CommonDialect,
-		continuationSeparator: &separator,
-	}
+	p := formatter{DocumentSession: erabasic.DocumentSession{Kind: erabasic.ERB, State: erabasic.State{Declarations: false}, Dialect: erabasic.CommonDialect, ContinuationSeparator: &separator}, rules: rules}
 	src := []byte("IF A>0")
 	q := p.continuationProxy(src)
 	continuationProxySyntax(q)
@@ -185,26 +173,9 @@ func TestContinuedDeclarationTracksFunctionState(t *testing.T) {
 	}
 }
 
-func TestContinuationDiagnosticMapsUnicodeColumn(t *testing.T) {
-	segments := []continuationSegment{
-		{logicalStart: 0, logicalEnd: len([]byte("  😀 +")), line: 3, sourceStart: 12, sourceEnd: 12 + len([]byte("  😀 +"))},
-	}
-	source := []byte("  😀 +")
-	if got := continuationByteOffset(4, source); got != len([]byte("  😀")) {
-		t.Fatalf("offset=%d", got)
-	}
-	segment, local := continuationDiagnosticSegment(len([]byte("  😀")), segments)
-	if segment != 0 || local != len([]byte("  😀")) {
-		t.Fatalf("segment=%d local=%d", segment, local)
-	}
-}
-
 func TestContinuationSyntaxMapsEditsToPhysicalRow(t *testing.T) {
 	separator := " "
-	r := FormatWithOptions([]byte("@F\n{\nIF A>\n0\n}\nENDIF\n"), ERB, Options{
-		Select:                []RuleID{BinarySpacing, ContinuationIndent},
-		ContinuationSeparator: &separator,
-	})
+	r := FormatWithOptions([]byte("@F\n{\nIF A>\n0\n}\nENDIF\n"), ERB, Options{Select: []RuleID{BinarySpacing, ContinuationIndent}, ContinuationSeparator: &separator})
 	if len(r.Diagnostics) != 0 {
 		t.Fatalf("diagnostics=%+v", r.Diagnostics)
 	}
@@ -212,10 +183,7 @@ func TestContinuationSyntaxMapsEditsToPhysicalRow(t *testing.T) {
 	if string(r.Output) != want {
 		t.Fatalf("got=%q want=%q changes=%+v", r.Output, want, r.Changes)
 	}
-	again := FormatWithOptions(r.Output, ERB, Options{
-		Select:                []RuleID{BinarySpacing, ContinuationIndent},
-		ContinuationSeparator: &separator,
-	})
+	again := FormatWithOptions(r.Output, ERB, Options{Select: []RuleID{BinarySpacing, ContinuationIndent}, ContinuationSeparator: &separator})
 	if string(again.Output) != want || len(again.Diagnostics) != 0 {
 		t.Fatalf("not idempotent: output=%q diagnostics=%+v", again.Output, again.Diagnostics)
 	}
@@ -224,10 +192,7 @@ func TestContinuationSyntaxMapsEditsToPhysicalRow(t *testing.T) {
 func TestContinuationPreservesRawPayload(t *testing.T) {
 	separator := " "
 	src := []byte("@F\n{\nBEGIN  raw  {A+1};!; keep\n}\n")
-	r := FormatWithOptions(src, ERB, Options{
-		Select:                []RuleID{ContinuationIndent},
-		ContinuationSeparator: &separator,
-	})
+	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{ContinuationIndent}, ContinuationSeparator: &separator})
 	if len(r.Diagnostics) != 0 {
 		t.Fatalf("diagnostics=%+v", r.Diagnostics)
 	}
@@ -241,10 +206,7 @@ func TestContinuationCustomSeparatorsKeepPhysicalRows(t *testing.T) {
 	for _, separator := range []string{"", "+"} {
 		t.Run(separator, func(t *testing.T) {
 			src := []byte("@F\n{\nBEGIN \nraw\n}\n")
-			r := FormatWithOptions(src, ERB, Options{
-				Select:                []RuleID{ContinuationIndent},
-				ContinuationSeparator: &separator,
-			})
+			r := FormatWithOptions(src, ERB, Options{Select: []RuleID{ContinuationIndent}, ContinuationSeparator: &separator})
 			if len(r.Diagnostics) != 0 {
 				t.Fatalf("separator=%q diagnostics=%+v", separator, r.Diagnostics)
 			}
@@ -259,10 +221,7 @@ func TestContinuationCustomSeparatorsKeepPhysicalRows(t *testing.T) {
 func TestContinuationDisabledExpressionRulesLeaveInteriorUntouched(t *testing.T) {
 	separator := " "
 	src := []byte("@F\n{\nIF A>\n0\n}\nENDIF\n")
-	r := FormatWithOptions(src, ERB, Options{
-		Select:                []RuleID{ContinuationIndent},
-		ContinuationSeparator: &separator,
-	})
+	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{ContinuationIndent}, ContinuationSeparator: &separator})
 	if len(r.Diagnostics) != 0 {
 		t.Fatalf("diagnostics=%+v", r.Diagnostics)
 	}
@@ -282,7 +241,7 @@ func TestContinuationSpacingPreservesUnindentedPhysicalRows(t *testing.T) {
 			t.Fatalf("%q: %+v", body, r)
 		}
 		for i := 2; i < len(before)-2; i++ {
-			if len(after[i]) == 0 || halfSpace(after[i][0]) {
+			if len(after[i]) == 0 || erabasic.HalfSpace(after[i][0]) {
 				t.Fatalf("row indentation changed: %q -> %q", before[i], after[i])
 			}
 		}
@@ -297,8 +256,8 @@ func TestContinuationCaretCommentsAllowProvenSyntax(t *testing.T) {
 	separator := " "
 	src := []byte("@F\n{\nRETURN 1+2;^; tail\n}\n")
 	want := []byte("@F\n    {\nRETURN 1 + 2;^; tail\n    }\n")
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
-		r := FormatWithOptions(src, ERB, Options{Dialect: dialect, ContinuationSeparator: &separator})
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
+		r := FormatWithOptions(src, ERB, Options{Dialect: Dialect(dialect), ContinuationSeparator: &separator})
 		if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 0 {
 			t.Fatalf("dialect=%v: %+v", dialect, r)
 		}
@@ -323,10 +282,7 @@ func TestContinuationSeparatorValidationInCore(t *testing.T) {
 func TestContinuationFormPayloadSpansRows(t *testing.T) {
 	separator := " "
 	src := []byte("@F\n{\nPRINTFORM  hello {A+1}\nraw  text\n}\nRETURN 0\n")
-	r := FormatWithOptions(src, ERB, Options{
-		Select:                []RuleID{BinarySpacing, FormPadding, ContinuationIndent},
-		ContinuationSeparator: &separator,
-	})
+	r := FormatWithOptions(src, ERB, Options{Select: []RuleID{BinarySpacing, FormPadding, ContinuationIndent}, ContinuationSeparator: &separator})
 	if len(r.Diagnostics) != 0 {
 		t.Fatalf("diagnostics=%+v output=%q", r.Diagnostics, r.Output)
 	}
@@ -337,10 +293,7 @@ func TestContinuationFormPayloadSpansRows(t *testing.T) {
 
 func TestContinuationMalformedFormReportsPhysicalRow(t *testing.T) {
 	separator := " "
-	r := FormatWithOptions([]byte("@F\n{\nPRINTFORM  hello {A+1\nraw  text\n}\nRETURN 0\n"), ERB, Options{
-		Select:                []RuleID{BinarySpacing, FormPadding, ContinuationIndent},
-		ContinuationSeparator: &separator,
-	})
+	r := FormatWithOptions([]byte("@F\n{\nPRINTFORM  hello {A+1\nraw  text\n}\nRETURN 0\n"), ERB, Options{Select: []RuleID{BinarySpacing, FormPadding, ContinuationIndent}, ContinuationSeparator: &separator})
 	want := "@F\n    {\nPRINTFORM  hello {A+1\nraw  text\n    }\nRETURN 0\n"
 	if string(r.Output) != want {
 		t.Fatalf("output=%q want=%q", r.Output, want)

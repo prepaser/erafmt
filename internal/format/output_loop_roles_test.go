@@ -3,18 +3,15 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestSplitReadonlyDestinations(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		options := destinationRoleOptions()
-		options.Dialect = dialect
-		for _, line := range []string{
-			`SPLIT "a,b",",",ITEMNAME`,
-			`SPLIT "a,b",",",RESULTS,ITEMPRICE:0`,
-			`HTML_TAGSPLIT "<b>",ITEMNAME`,
-			`HTML_TAGSPLIT "<b>",RESULTS,ITEMPRICE:0`,
-		} {
+		options.Dialect = Dialect(dialect)
+		for _, line := range []string{`SPLIT "a,b",",",ITEMNAME`, `SPLIT "a,b",",",RESULTS,ITEMPRICE:0`, `HTML_TAGSPLIT "<b>",ITEMNAME`, `HTML_TAGSPLIT "<b>",RESULTS,ITEMPRICE:0`} {
 			src := []byte("@F\n" + line + "\n")
 			r := FormatWithOptions(src, ERB, options)
 			if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {

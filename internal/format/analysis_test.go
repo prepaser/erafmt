@@ -3,6 +3,8 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestMalformedHeaderPreservesWholeFile(t *testing.T) {
@@ -32,11 +34,7 @@ func TestDeclarationDefaultKeepsComparisonTokens(t *testing.T) {
 }
 
 func TestMisplacedERBDeclarationPreservesItsRegion(t *testing.T) {
-	for _, region := range []string{
-		"#DIM  CONST USR_X,1+2\nRETURN 0\n",
-		"@BAD\nRETURN 0\n#DIM  CONST USR_X,1+2\n",
-		"@BAD\n$LABEL\n#DIM  USR_X\n",
-	} {
+	for _, region := range []string{"#DIM  CONST USR_X,1+2\nRETURN 0\n", "@BAD\nRETURN 0\n#DIM  CONST USR_X,1+2\n", "@BAD\n$LABEL\n#DIM  USR_X\n"} {
 		input := []byte(region + "@GOOD\nRETURN 1+2\n")
 		r := FormatWithOptions(input, ERB, Options{})
 		want := region + "@GOOD\n    RETURN 1 + 2\n"
@@ -51,10 +49,7 @@ func TestMisplacedERBDeclarationPreservesItsRegion(t *testing.T) {
 }
 
 func TestDeclarationContextAcrossPreprocessorBranches(t *testing.T) {
-	for _, src := range []string{
-		"@F\n[IF USR_X]\nRETURN 0\n[ENDIF]\n#DIM  USR_X\n",
-		"@F\n[IF USR_X]\n#DIM USR_X\n[ELSE]\nRETURN 0\n[ENDIF]\n#DIM  USR_Y\n",
-	} {
+	for _, src := range []string{"@F\n[IF USR_X]\nRETURN 0\n[ENDIF]\n#DIM  USR_X\n", "@F\n[IF USR_X]\n#DIM USR_X\n[ELSE]\nRETURN 0\n[ENDIF]\n#DIM  USR_Y\n"} {
 		r := FormatWithOptions([]byte(src), ERB, Options{})
 		if string(r.Output) != src || len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != "unsupported_declaration" {
 			t.Fatalf("result=%+v", r)
@@ -84,16 +79,22 @@ func TestPreprocessorSuffixPreservesUntrustedFile(t *testing.T) {
 
 func TestConditionalBranchesKeepCommonStructure(t *testing.T) {
 	cases := []struct{ source, want string }{
-		{"@F\nIF A\nRETURN 0\n[IF_DEBUG]\nELSEIF B\nRETURN 1\n[ENDIF]\nELSEIF C\nRETURN 2\nENDIF\n", "@F\n    IF A\n        RETURN 0\n[IF_DEBUG]\n    ELSEIF B\n        RETURN 1\n[ENDIF]\n    ELSEIF C\n        RETURN 2\n    ENDIF\n"},
-		{"@F\nSELECTCASE A\nCASE 1\nRETURN 0\n[IF_DEBUG]\nCASEELSE\nRETURN 1\n[ENDIF]\nENDSELECT\nRETURN 2\n", "@F\n    SELECTCASE A\n        CASE 1\n            RETURN 0\n[IF_DEBUG]\n        CASEELSE\n            RETURN 1\n[ENDIF]\n    ENDSELECT\n    RETURN 2\n"},
+		{
+			"@F\nIF A\nRETURN 0\n[IF_DEBUG]\nELSEIF B\nRETURN 1\n[ENDIF]\nELSEIF C\nRETURN 2\nENDIF\n",
+			"@F\n    IF A\n        RETURN 0\n[IF_DEBUG]\n    ELSEIF B\n        RETURN 1\n[ENDIF]\n    ELSEIF C\n        RETURN 2\n    ENDIF\n",
+		},
+		{
+			"@F\nSELECTCASE A\nCASE 1\nRETURN 0\n[IF_DEBUG]\nCASEELSE\nRETURN 1\n[ENDIF]\nENDSELECT\nRETURN 2\n",
+			"@F\n    SELECTCASE A\n        CASE 1\n            RETURN 0\n[IF_DEBUG]\n        CASEELSE\n            RETURN 1\n[ENDIF]\n    ENDSELECT\n    RETURN 2\n",
+		},
 	}
 	for _, tc := range cases {
-		for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
-			r := FormatWithOptions([]byte(tc.source), ERB, Options{Select: []RuleID{InstructionIndent}, Dialect: dialect})
+		for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
+			r := FormatWithOptions([]byte(tc.source), ERB, Options{Select: []RuleID{InstructionIndent}, Dialect: Dialect(dialect)})
 			if string(r.Output) != tc.want || len(r.Diagnostics) != 0 {
 				t.Fatalf("dialect=%v output=%q diagnostics=%+v", dialect, r.Output, r.Diagnostics)
 			}
-			again := FormatWithOptions(r.Output, ERB, Options{Select: []RuleID{InstructionIndent}, Dialect: dialect})
+			again := FormatWithOptions(r.Output, ERB, Options{Select: []RuleID{InstructionIndent}, Dialect: Dialect(dialect)})
 			if !bytes.Equal(again.Output, r.Output) || len(again.Changes) != 0 {
 				t.Fatalf("not idempotent: %+v", again)
 			}

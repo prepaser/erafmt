@@ -3,21 +3,14 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestFormRejectsEmptyFirstField(t *testing.T) {
 	rules := allFormRules(t)
-	for _, input := range []string{
-		`{,}`,
-		`{,2}`,
-		`{,2,RIGHT}`,
-		`{,,RIGHT}`,
-		`%,%`,
-		`%,2%`,
-		`%,2,RIGHT%`,
-		`%%`,
-	} {
-		edits, err := formEdits([]byte(input), rules, formLine)
+	for _, input := range []string{`{,}`, `{,2}`, `{,2,RIGHT}`, `{,,RIGHT}`, `%,%`, `%,2%`, `%,2,RIGHT%`, `%%`} {
+		edits, err := formEdits([]byte(input), rules, erabasic.FormLine)
 		if err == nil {
 			t.Fatalf("empty FORM operand %q was accepted", input)
 		}
@@ -29,18 +22,8 @@ func TestFormRejectsEmptyFirstField(t *testing.T) {
 
 func TestPrintFormsFormatsOnlySafeLiteralBodies(t *testing.T) {
 	options := Options{Select: []RuleID{FunctionIndent, InstructionIndent, BinarySpacing, FormPadding}, Dialect: EMEE}
-	input := []byte("@F\n" +
-		"PRINTFORMS \"x { 1+2 }\"\n" +
-		"PRINTFORMS CSTR+\"x { 1+2 }\"\n" +
-		"PRINTFORMS \"x \\{ 1+2 \\}\"\n" +
-		"PRINTFORMS @\"x { 1+2 }\"\n" +
-		"PRINTFORMS \"x {,2}\"\n")
-	want := []byte("@F\n" +
-		"    PRINTFORMS \"x {1 + 2}\"\n" +
-		"    PRINTFORMS CSTR + \"x { 1+2 }\"\n" +
-		"    PRINTFORMS \"x \\{ 1+2 \\}\"\n" +
-		"    PRINTFORMS @\"x {1 + 2}\"\n" +
-		"    PRINTFORMS \"x {,2}\"\n")
+	input := []byte("@F\n" + "PRINTFORMS \"x { 1+2 }\"\n" + "PRINTFORMS CSTR+\"x { 1+2 }\"\n" + "PRINTFORMS \"x \\{ 1+2 \\}\"\n" + "PRINTFORMS @\"x { 1+2 }\"\n" + "PRINTFORMS \"x {,2}\"\n")
+	want := []byte("@F\n" + "    PRINTFORMS \"x {1 + 2}\"\n" + "    PRINTFORMS CSTR + \"x { 1+2 }\"\n" + "    PRINTFORMS \"x \\{ 1+2 \\}\"\n" + "    PRINTFORMS @\"x {1 + 2}\"\n" + "    PRINTFORMS \"x {,2}\"\n")
 	r := FormatWithOptions(input, ERB, options)
 	if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 1 {
 		t.Fatalf("output=%q diagnostics=%+v want=%q", r.Output, r.Diagnostics, want)
@@ -66,14 +49,8 @@ func TestPrintFormsNFormatsValidatedEMEELiteralAndRollsBackOverflow(t *testing.T
 
 func TestPrintFormsLiteralGuards(t *testing.T) {
 	options := Options{Select: []RuleID{FunctionIndent, InstructionIndent, BinarySpacing, FormPadding}, Dialect: EMEE}
-	input := []byte("@F\n" +
-		"PRINTFORMS \"x { [[alias]] }\"\n" +
-		"PRINTFORMS \"x { A ;!; B }\"\n" +
-		"DEBUGPRINTFORM \"x { 1+2 }\"\n")
-	want := []byte("@F\n" +
-		"    PRINTFORMS \"x { [[alias]] }\"\n" +
-		"    PRINTFORMS \"x { A ;!; B }\"\n" +
-		"    DEBUGPRINTFORM \"x { 1+2 }\"\n")
+	input := []byte("@F\n" + "PRINTFORMS \"x { [[alias]] }\"\n" + "PRINTFORMS \"x { A ;!; B }\"\n" + "DEBUGPRINTFORM \"x { 1+2 }\"\n")
+	want := []byte("@F\n" + "    PRINTFORMS \"x { [[alias]] }\"\n" + "    PRINTFORMS \"x { A ;!; B }\"\n" + "    DEBUGPRINTFORM \"x { 1+2 }\"\n")
 	r := FormatWithOptions(input, ERB, options)
 	if !bytes.Equal(r.Output, want) || len(r.Diagnostics) != 0 {
 		t.Fatalf("guard output=%q diagnostics=%+v want=%q", r.Output, r.Diagnostics, want)

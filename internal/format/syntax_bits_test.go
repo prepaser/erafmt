@@ -2,16 +2,28 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestBitCommandLiteralAndOmissionGuards(t *testing.T) {
 	bad := []string{
-		"SETBIT", "SETBIT ,1", "SETBIT RESULT,,1", "CLEARBIT RESULT, ,1",
-		"SETBIT 1,2", "SETBIT (-1),2", "SETBIT \"RESULT\",1",
-		"SETBIT RESULT,\"1\"", "SETBIT RESULT,@\"1\"", "INVERTBIT RESULT,64",
-		"SETBIT RESULT,-1", "SETBIT RESULT,0x40", "SETBIT RESULT,0b1000000",
-		"SETBIT RESULT,1e2", "SETBIT RESULT,1p6", "SETBIT RESULT,0xFFFFFFFFFFFFFFFF",
+		"SETBIT",
+		"SETBIT ,1",
+		"SETBIT RESULT,,1",
+		"CLEARBIT RESULT, ,1",
+		"SETBIT 1,2",
+		"SETBIT (-1),2",
+		"SETBIT \"RESULT\",1",
+		"SETBIT RESULT,\"1\"",
+		"SETBIT RESULT,@\"1\"",
+		"INVERTBIT RESULT,64",
+		"SETBIT RESULT,-1",
+		"SETBIT RESULT,0x40",
+		"SETBIT RESULT,0b1000000",
+		"SETBIT RESULT,1e2",
+		"SETBIT RESULT,1p6",
+		"SETBIT RESULT,0xFFFFFFFFFFFFFFFF",
 	}
 	for _, line := range bad {
 		input := []byte("@F\n" + line + "\n")
@@ -28,11 +40,20 @@ func TestBitCommandLiteralAndOmissionGuards(t *testing.T) {
 
 func TestBitCommandsPreserveMacroAndDynamicFields(t *testing.T) {
 	for _, line := range []string{
-		"SETBIT EFAUDIT_BITS", "SETBIT EFAUDIT_BITS,", "SETBIT RESULT",
-		"SETBIT RESULT,", "SETBIT RESULT,(INDEX+1)", "SETBIT (RESULT),0x3f,",
-		"SETBIT RESULT,0b111111", "SETBIT RESULT,0x+3F", "SETBIT RESULT,1e-100",
-		"SETBIT RESULT,10p-2", "SETBIT RESULT,1e4294967296", "SETBIT RESULT,1e4294967295",
-		"SETBIT RESULT,-0xFFFFFFFFFFFFFFFF", "SETBIT RESULT,(-1e-100)",
+		"SETBIT EFAUDIT_BITS",
+		"SETBIT EFAUDIT_BITS,",
+		"SETBIT RESULT",
+		"SETBIT RESULT,",
+		"SETBIT RESULT,(INDEX+1)",
+		"SETBIT (RESULT),0x3f,",
+		"SETBIT RESULT,0b111111",
+		"SETBIT RESULT,0x+3F",
+		"SETBIT RESULT,1e-100",
+		"SETBIT RESULT,10p-2",
+		"SETBIT RESULT,1e4294967296",
+		"SETBIT RESULT,1e4294967295",
+		"SETBIT RESULT,-0xFFFFFFFFFFFFFFFF",
+		"SETBIT RESULT,(-1e-100)",
 	} {
 		input := []byte("@F\n" + line + "\n")
 		opts := Options{Select: []RuleID{BinarySpacing, CommaSpacing, DelimiterSpacing}}
@@ -74,9 +95,7 @@ func TestBitCommandExpressionErrorColumn(t *testing.T) {
 
 func TestBitCommandDestinationShapeGuardsKnownExpressions(t *testing.T) {
 	options := Options{Select: []RuleID{BinarySpacing, CommaSpacing, DelimiterSpacing}}
-	for _, line := range []string{
-		"SETBIT RESULT+1,1", "CLEARBIT RESULT*1,1", "INVERTBIT STRLENS(\"x\"),1",
-	} {
+	for _, line := range []string{"SETBIT RESULT+1,1", "CLEARBIT RESULT*1,1", "INVERTBIT STRLENS(\"x\"),1"} {
 		r := FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, options)
 		if string(r.Output) != "@F\n"+line+"\n" || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("%q output=%q diagnostics=%v", line, r.Output, r.Diagnostics)
@@ -92,11 +111,7 @@ func TestBitCommandDestinationShapeGuardsKnownExpressions(t *testing.T) {
 
 func TestBitCommandsRejectReadonlyDestinations(t *testing.T) {
 	options := Options{Select: []RuleID{BinarySpacing, CommaSpacing, DelimiterSpacing}}
-	for _, line := range []string{
-		"SETBIT ITEMPRICE,1",
-		"CLEARBIT ABLNAME:0,1",
-		"INVERTBIT ;!; ITEMPRICE,1",
-	} {
+	for _, line := range []string{"SETBIT ITEMPRICE,1", "CLEARBIT ABLNAME:0,1", "INVERTBIT ;!; ITEMPRICE,1"} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {

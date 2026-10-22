@@ -3,6 +3,8 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestCallTargetEscapes(t *testing.T) {
@@ -77,15 +79,15 @@ func TestCallEscapeAcrossContinuationRows(t *testing.T) {
 }
 
 func TestCallTargetIncompleteEscapes(t *testing.T) {
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, command := range []string{"CALL", "CALLF", "TRYCALL", "JUMP", "GOTO", "CALLSHARP"} {
-			if commandUnavailable(command, dialect) {
+			if erabasic.CommandUnavailable(command, dialect) {
 				continue
 			}
 			for _, tail := range []string{"\\", "\\\x00(1+2)", "\\\x00,1+2", "\\\x00[1+2](3+4)"} {
 				prefix := "    " + command + " F"
 				source := []byte("@F\n" + prefix + tail + "\n")
-				options := Options{Dialect: dialect}
+				options := Options{Dialect: Dialect(dialect)}
 				result := FormatWithOptions(source, ERB, options)
 				if !bytes.Equal(result.Output, source) || len(result.Changes) != 0 || len(result.Diagnostics) != 1 {
 					t.Fatalf("dialect=%d source=%q result=%+v", dialect, source, result)

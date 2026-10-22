@@ -1,18 +1,11 @@
 package format
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestScalarIgnoredSurplusPreservesBody(t *testing.T) {
-	for _, source := range []string{
-		"REDRAW  1+2,!!\n",
-		"CLEARLINE  1+2,\"x\"\n",
-		"CUPCHECK  1+2,3\n",
-		"CALLTRAIN  1+2,3\n",
-		"DELDATA  1+2,3\n",
-		"PRINT_ABL  1+2,3\n",
-		"PRINTS  \"x\"+\"y\",1\n",
-		"PRINTSL  \"x\",!!\n",
-	} {
+	for _, source := range []string{"REDRAW  1+2,!!\n", "CLEARLINE  1+2,\"x\"\n", "CUPCHECK  1+2,3\n", "CALLTRAIN  1+2,3\n", "DELDATA  1+2,3\n", "PRINT_ABL  1+2,3\n", "PRINTS  \"x\"+\"y\",1\n", "PRINTSL  \"x\",!!\n"} {
 		r := FormatWithOptions([]byte(source), ERB, Options{Select: []RuleID{BinarySpacing, CommandSpacing, CommaSpacing}})
 		if string(r.Output) != source || len(r.Diagnostics) != 1 || r.Diagnostics[0].Code != "ignored_arguments" || r.Diagnostics[0].Severity != Warning {
 			t.Fatalf("source=%q output=%q diagnostics=%+v", source, r.Output, r.Diagnostics)

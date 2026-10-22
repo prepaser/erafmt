@@ -2,35 +2,20 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
 func TestKnownDestinationRoles(t *testing.T) {
 	options := destinationRoleOptions()
-	for _, line := range []string{
-		"TIMES CSTR,1.5",
-		"TIMES RESULTS:0,1.5",
-		"SETBIT CSTR,1",
-		"CLEARBIT RESULTS:0,1",
-		"INVERTBIT CSTR:0,1",
-		"CVARSET RESULT,0,1",
-		"CVARSET RESULTS,0,\"x\"",
-		"CVARSET CFLAG,0,\"x\"",
-		"CVARSET CSTR,0,1",
-	} {
+	for _, line := range []string{"TIMES CSTR,1.5", "TIMES RESULTS:0,1.5", "SETBIT CSTR,1", "CLEARBIT RESULTS:0,1", "INVERTBIT CSTR:0,1", "CVARSET RESULT,0,1", "CVARSET RESULTS,0,\"x\"", "CVARSET CFLAG,0,\"x\"", "CVARSET CSTR,0,1"} {
 		input := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(input, ERB, options)
 		if !bytes.Equal(r.Output, input) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("%q output=%q diagnostics=%+v", line, r.Output, r.Diagnostics)
 		}
 	}
-
-	for _, line := range []string{
-		"TIMES RESULT,1.5",
-		"SETBIT RESULT,1",
-		"CVARSET CFLAG,0,1",
-		"CVARSET CSTR,0,\"x\"",
-	} {
+	for _, line := range []string{"TIMES RESULT,1.5", "SETBIT RESULT,1", "CVARSET CFLAG,0,1", "CVARSET CSTR,0,\"x\""} {
 		r := FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, options)
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("valid %q output=%q diagnostics=%+v", line, r.Output, r.Diagnostics)

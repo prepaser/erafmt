@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -22,12 +23,7 @@ func TestDeclarationAndHeaderRejectBareAssignmentExpressions(t *testing.T) {
 }
 
 func TestDeclarationAndHeaderKeepComparisonExpressions(t *testing.T) {
-	for _, source := range []string{
-		"@F(ARG:0=1==2)\n",
-		"@F\n#DIM VALUE=1==2\n",
-		"@F\n#DIM VALUE,1=1==2\n",
-		"@F\n#DIMS VALUE,2=\"a\",\"b\"\n",
-	} {
+	for _, source := range []string{"@F(ARG:0=1==2)\n", "@F\n#DIM VALUE=1==2\n", "@F\n#DIM VALUE,1=1==2\n", "@F\n#DIMS VALUE,2=\"a\",\"b\"\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		if len(result.Diagnostics) != 0 {
 			t.Fatalf("source=%q diagnostics=%+v output=%q", source, result.Diagnostics, result.Output)
@@ -63,13 +59,7 @@ func TestContinuedDeclarationRejectsBareAssignmentExpression(t *testing.T) {
 }
 
 func TestDeclarationAndHeaderAssignmentChecksDeferUnknownSyntax(t *testing.T) {
-	for _, source := range []string{
-		"@F(ARG:0=UNKNOWN=2)\n",
-		"@F(ARG:0=UNKNOWN+ABS(1)++)\n",
-		"@F(ARG:0=UNKNOWN=2);!;\n",
-		"@F\n#DIM VALUE=UNKNOWN=2\n",
-		"@F\n#DIM VALUE=1;!;=2\n",
-	} {
+	for _, source := range []string{"@F(ARG:0=UNKNOWN=2)\n", "@F(ARG:0=UNKNOWN+ABS(1)++)\n", "@F(ARG:0=UNKNOWN=2);!;\n", "@F\n#DIM VALUE=UNKNOWN=2\n", "@F\n#DIM VALUE=1;!;=2\n"} {
 		result := FormatWithOptions([]byte(source), ERB, Options{})
 		if len(result.Diagnostics) != 0 {
 			t.Fatalf("source=%q diagnostics=%+v output=%q", source, result.Diagnostics, result.Output)

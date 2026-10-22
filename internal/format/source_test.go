@@ -3,27 +3,29 @@ package format
 import (
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestColumnCheckpointsPreserveUnicodePositions(t *testing.T) {
 	src := []byte("@F\n" + strings.Repeat("a€😀́", 1000) + "\r\nshort\n")
-	p := formatter{src: src, lines: linesOf(src)}
-	if p.columnAt(0, 2) != 3 || p.columns != nil {
+	p := formatter{DocumentSession: erabasic.DocumentSession{Src: src, Lines: linesOf(src)}}
+	if p.columnAt(0, 2) != 3 || p.Columns != nil {
 		t.Fatal("short line allocated a column index")
 	}
-	l := p.lines[1]
-	offsets := []int{l.start, l.end, l.start + 4095, l.start + 4096, l.start + 4097}
-	for offset := l.start; offset < l.end; offset += 257 {
+	l := p.Lines[1]
+	offsets := []int{l.Start, l.End, l.Start + 4095, l.Start + 4096, l.Start + 4097}
+	for offset := l.Start; offset < l.End; offset += 257 {
 		offsets = append(offsets, offset)
 	}
 	for i := len(offsets) - 1; i >= 0; i-- {
 		offset := offsets[i]
-		if got, want := p.columnAt(1, offset), column(src, l, offset); got != want {
+		if got, want := p.columnAt(1, offset), erabasic.Column(src, l, offset); got != want {
 			t.Fatalf("offset=%d column=%d want=%d", offset, got, want)
 		}
 	}
-	if len(p.columns[1]) == 0 || len(p.columns[1]) > (l.end-l.start)/1024+1 {
-		t.Fatalf("unexpected checkpoint count: %d", len(p.columns[1]))
+	if len(p.Columns[1]) == 0 || len(p.Columns[1]) > (l.End-l.Start)/1024+1 {
+		t.Fatalf("unexpected checkpoint count: %d", len(p.Columns[1]))
 	}
 }
 

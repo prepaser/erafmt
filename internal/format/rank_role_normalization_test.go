@@ -3,13 +3,12 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
-func rankRoleOptions(dialect Dialect) Options {
-	return Options{
-		Dialect: dialect,
-		Select:  []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding},
-	}
+func rankRoleOptions(dialect erabasic.Dialect) Options {
+	return Options{Dialect: Dialect(dialect), Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
 }
 
 func TestRankRoleNormalizationRejectsProvenInvalidBackingRoles(t *testing.T) {
@@ -26,7 +25,7 @@ func TestRankRoleNormalizationRejectsProvenInvalidBackingRoles(t *testing.T) {
 		"SORTCHARA DA:0:0",
 		"SORTCHARA (DA)",
 	}
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, body := range cases {
 			src := []byte("@F\n" + body + "\n")
 			r := FormatWithOptions(src, ERB, rankRoleOptions(dialect))
@@ -38,17 +37,8 @@ func TestRankRoleNormalizationRejectsProvenInvalidBackingRoles(t *testing.T) {
 }
 
 func TestRankRoleNormalizationPreservesValidIndexedBackingRoles(t *testing.T) {
-	cases := []string{
-		"ARRAYREMOVE A:0,1,2",
-		"ARRAYSHIFT A:0,1,0",
-		"ARRAYSORT (A),FORWARD",
-		"CVARSET CFLAG:0,0,1",
-		"FOR A:0,0,1\nNEXT",
-		"SORTCHARA CFLAG:0",
-		`SORTCHARA CFLAG:"key"`,
-		`SORTCHARA CFLAG:("key"+"suffix")`,
-	}
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824, EMEE} {
+	cases := []string{"ARRAYREMOVE A:0,1,2", "ARRAYSHIFT A:0,1,0", "ARRAYSORT (A),FORWARD", "CVARSET CFLAG:0,0,1", "FOR A:0,0,1\nNEXT", "SORTCHARA CFLAG:0", `SORTCHARA CFLAG:"key"`, `SORTCHARA CFLAG:("key"+"suffix")`}
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824, erabasic.EMEE} {
 		for _, body := range cases {
 			r := FormatWithOptions([]byte("@F\n"+body+"\n"), ERB, rankRoleOptions(dialect))
 			if len(r.Diagnostics) != 0 {

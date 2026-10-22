@@ -5,35 +5,38 @@ import (
 	"maps"
 	"strings"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestContinuationProxyKeepsParentNames(t *testing.T) {
 	for _, source := range []string{"#DIM UserNew,1", "$LabelNew", "#PRI"} {
 		p := formatter{
-			kind: ERB, base: 1, state: state{declarations: true},
-			rules: ruleSet{CommaSpacing: true, LabelMarkerSpacing: true},
-			functionContext: functionContext{
-				privateDeclarations: map[string]bool{"UserOld": true},
-				dollarLabels:        map[string]bool{"LabelOld": true},
+			DocumentSession: erabasic.DocumentSession{
+				Kind:            erabasic.ERB,
+				Base:            1,
+				State:           erabasic.State{Declarations: true},
+				FunctionContext: erabasic.FunctionContext{PrivateDeclarations: map[string]bool{"UserOld": true}, DollarLabels: map[string]bool{"LabelOld": true}},
 			},
+			rules: ruleSet{CommaSpacing: true, LabelMarkerSpacing: true},
 		}
 		if source == "#PRI" {
-			p.functionName = "EVENTTRAIN"
-			p.eventFunctionKnown, p.eventFunctionExact = true, true
-			p.sharpAttributes = sharpAttributeSingle
+			p.FunctionName = "EVENTTRAIN"
+			p.EventFunctionKnown, p.EventFunctionExact = true, true
+			p.SharpAttributes = erabasic.SharpAttributeSingle
 		}
-		declarations := maps.Clone(p.privateDeclarations)
-		labels := maps.Clone(p.dollarLabels)
-		attributes := p.sharpAttributes
+		declarations := maps.Clone(p.PrivateDeclarations)
+		labels := maps.Clone(p.DollarLabels)
+		attributes := p.SharpAttributes
 		proxy := p.continuationProxy([]byte(source))
 		continuationProxySyntax(proxy)
-		if len(proxy.diagnostics) != 0 || len(proxy.opaque) != 1 || proxy.opaque[0] {
+		if len(proxy.diagnostics) != 0 || len(proxy.Opaque) != 1 || proxy.Opaque[0] {
 			t.Fatalf("proxy did not prove %q: %+v", source, proxy.diagnostics)
 		}
-		if !maps.Equal(p.privateDeclarations, declarations) || !maps.Equal(p.dollarLabels, labels) {
+		if !maps.Equal(p.PrivateDeclarations, declarations) || !maps.Equal(p.DollarLabels, labels) {
 			t.Fatalf("uncommitted proxy changed parent names for %q", source)
 		}
-		if p.sharpAttributes != attributes {
+		if p.SharpAttributes != attributes {
 			t.Fatalf("uncommitted proxy changed parent attributes for %q", source)
 		}
 	}
@@ -78,10 +81,7 @@ func TestContinuedFullwidthState(t *testing.T) {
 	for _, tc := range []struct {
 		head string
 		code string
-	}{
-		{"$L", "duplicate_label"},
-		{"#DIM USR_X", "duplicate_declaration"},
-	} {
+	}{{"$L", "duplicate_label"}, {"#DIM USR_X", "duplicate_declaration"}} {
 		src := "@F\n{\n　" + tc.head + "\n}\n" + tc.head + "\nRETURN 0\n"
 		r := FormatWithOptions([]byte(src), ERB, options)
 		line := 0

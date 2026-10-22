@@ -3,6 +3,8 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func TestLabelMarkerSpacing(t *testing.T) {
@@ -95,9 +97,9 @@ func TestBareSharpFunctionsOwnMetadataTails(t *testing.T) {
 }
 
 func TestSharpFunctionPayloadAndERHStayOpaque(t *testing.T) {
-	for _, kind := range []Kind{ERB, ERH} {
+	for _, kind := range []erabasic.Kind{erabasic.ERB, erabasic.ERH} {
 		input := []byte("#FUNCTION  value   ; note   \n")
-		r := FormatWithOptions(input, kind, Options{Select: []RuleID{CodeTrailingWhitespace, InlineCommentSpacing, CommentTrailingWhitespace}})
+		r := FormatWithOptions(input, Kind(kind), Options{Select: []RuleID{CodeTrailingWhitespace, InlineCommentSpacing, CommentTrailingWhitespace}})
 		if !bytes.Equal(r.Output, input) {
 			t.Fatalf("kind=%v changed opaque declaration: %q", kind, r.Output)
 		}

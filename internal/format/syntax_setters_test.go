@@ -3,13 +3,12 @@ package format
 import (
 	"bytes"
 	"testing"
+
+	"github.com/prepaser/erafmt/internal/erabasic"
 )
 
 func setterOptions() Options {
-	return Options{Select: []RuleID{
-		InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing,
-		DelimiterSpacing, FormPadding,
-	}}
+	return Options{Select: []RuleID{InstructionIndent, CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
 }
 
 func TestSetterExpressionFormatting(t *testing.T) {
@@ -27,10 +26,7 @@ func TestSetterExpressionFormatting(t *testing.T) {
 
 func TestSetterLiteralAndEmptyArgumentGuards(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing, FormPadding}}
-	for _, line := range []string{
-		"VARSET 1,2", "VARSET (-1),2", "VARSET \"RESULT\",1", "VARSET @\"RESULT\",1",
-		"VARSET ,1", "VARSET RESULT,,1", "CVARSET CFLAG,,2", "POWER RESULT,2,,3",
-	} {
+	for _, line := range []string{"VARSET 1,2", "VARSET (-1),2", "VARSET \"RESULT\",1", "VARSET @\"RESULT\",1", "VARSET ,1", "VARSET RESULT,,1", "CVARSET CFLAG,,2", "POWER RESULT,2,,3"} {
 		input := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(input, ERB, options)
 		if !bytes.Equal(r.Output, input) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -53,13 +49,7 @@ func TestSetterOptionalFieldsAndMacroShapedFields(t *testing.T) {
 }
 
 func TestSetterOptionalTrailingFieldsAreNotSurplus(t *testing.T) {
-	for _, line := range []string{
-		"VARSET RESULT,",
-		"VARSET RESULT,1,2,",
-		"CVARSET CFLAG,",
-		"CVARSET CFLAG,0,1,2,",
-		"POWER RESULT,2,3,",
-	} {
+	for _, line := range []string{"VARSET RESULT,", "VARSET RESULT,1,2,", "CVARSET CFLAG,", "CVARSET CFLAG,0,1,2,", "POWER RESULT,2,3,"} {
 		r := FormatWithOptions([]byte("@F\n    "+line+"\n"), ERB, setterOptions())
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("%q diagnostics=%+v output=%q", line, r.Diagnostics, r.Output)
@@ -89,12 +79,7 @@ func TestSetterSurplusPreservesBodyAndWarns(t *testing.T) {
 
 func TestSetterSurplusGuards(t *testing.T) {
 	options := setterOptions()
-	for _, line := range []string{
-		`VARSET EFAUDIT_SETTER,1,2,3,4,5`,
-		`VARSET RESULT,1,2,3,UNKNOWN_TAIL_MACRO`,
-		`VARSET ;!; RESULT, 1, 2, 3, 4`,
-		`VARSET [[ALIAS]],1,2,3,4`,
-	} {
+	for _, line := range []string{`VARSET EFAUDIT_SETTER,1,2,3,4,5`, `VARSET RESULT,1,2,3,UNKNOWN_TAIL_MACRO`, `VARSET ;!; RESULT, 1, 2, 3, 4`, `VARSET [[ALIAS]],1,2,3,4`} {
 		src := []byte("@F\n    " + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 0 {
@@ -127,14 +112,7 @@ func TestSetterRuleOwnership(t *testing.T) {
 }
 
 func TestSetterProvenExpressionShapes(t *testing.T) {
-	for _, line := range []string{
-		"VARSET RESULT,RESULT 1",
-		"CVARSET CFLAG,0,RESULT 1",
-		"POWER RESULT,RESULT 1,2",
-		"VARSET RESULT:(1,2),1",
-		"VARSET RESULT,RESULT:(1,2)",
-		"POWER RESULT,RESULT:(RESULT 1)+1,2",
-	} {
+	for _, line := range []string{"VARSET RESULT,RESULT 1", "CVARSET CFLAG,0,RESULT 1", "POWER RESULT,RESULT 1,2", "VARSET RESULT:(1,2),1", "VARSET RESULT,RESULT:(1,2)", "POWER RESULT,RESULT:(RESULT 1)+1,2"} {
 		src := []byte("@F\n    " + line + "\n")
 		r := FormatWithOptions(src, ERB, setterOptions())
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -145,15 +123,7 @@ func TestSetterProvenExpressionShapes(t *testing.T) {
 			t.Fatalf("select-none %q: %+v", line, quiet)
 		}
 	}
-	for _, line := range []string{
-		"VARSET RESULT,RESULT+1",
-		"POWER RESULT,(RESULT:0)+1,2",
-		"VARSET RESULT,UNKNOWN 1",
-		"VARSET RESULT,IS",
-		"CVARSET CFLAG,IS,1",
-		"VARSET EFAUDIT_SETTER,RESULT 1",
-		"VARSET RESULT,;!;RESULT 1",
-	} {
+	for _, line := range []string{"VARSET RESULT,RESULT+1", "POWER RESULT,(RESULT:0)+1,2", "VARSET RESULT,UNKNOWN 1", "VARSET RESULT,IS", "CVARSET CFLAG,IS,1", "VARSET EFAUDIT_SETTER,RESULT 1", "VARSET RESULT,;!;RESULT 1"} {
 		r := FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, setterOptions())
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("valid/deferred %q: %+v", line, r.Diagnostics)
@@ -162,10 +132,7 @@ func TestSetterProvenExpressionShapes(t *testing.T) {
 }
 
 func TestSetterOmissionsPreserveMacroPrefixes(t *testing.T) {
-	for _, line := range []string{
-		"POWER EFAUDIT_POWER,,4", "POWER RESULT,EFAUDIT_VALUES,,4",
-		"POWER (result),2,,4", "VARSET CFLAG:INDEX,,1", "VARSET RESULT,F(1),,4",
-	} {
+	for _, line := range []string{"POWER EFAUDIT_POWER,,4", "POWER RESULT,EFAUDIT_VALUES,,4", "POWER (result),2,,4", "VARSET CFLAG:INDEX,,1", "VARSET RESULT,F(1),,4"} {
 		input := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(input, ERB, Options{Select: []RuleID{BinarySpacing, CommaSpacing, DelimiterSpacing}})
 		if !bytes.Equal(r.Output, input) || len(r.Diagnostics) != 0 || len(r.Changes) != 0 {
@@ -176,21 +143,13 @@ func TestSetterOmissionsPreserveMacroPrefixes(t *testing.T) {
 
 func TestSetterDestinationShapeGuardsKnownExpressions(t *testing.T) {
 	options := Options{Select: []RuleID{BinarySpacing, CommaSpacing, DelimiterSpacing}}
-	for _, line := range []string{
-		"VARSET RESULT+1,1", "VARSET RESULT*1,1", "VARSET -RESULT,1",
-		"VARSET -RESULT+SOME_MACRO,1", "VARSET -(RESULT)+SOME_MACRO,1",
-		"VARSET STRLENS(\"x\"),1", "VARSET (RESULT)+1,1",
-	} {
+	for _, line := range []string{"VARSET RESULT+1,1", "VARSET RESULT*1,1", "VARSET -RESULT,1", "VARSET -RESULT+SOME_MACRO,1", "VARSET -(RESULT)+SOME_MACRO,1", "VARSET STRLENS(\"x\"),1", "VARSET (RESULT)+1,1"} {
 		r := FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, options)
 		if string(r.Output) != "@F\n"+line+"\n" || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
 			t.Fatalf("%q output=%q diagnostics=%v", line, r.Output, r.Diagnostics)
 		}
 	}
-	for _, line := range []string{
-		"VARSET +RESULT,1", "VARSET (RESULT),1", "VARSET ((RESULT)),1",
-		"VARSET RESULT:1,1", "VARSET F(1),1", "VARSET UNKNOWN+1,1",
-		"VARSET -SOME_MACRO+1,1",
-	} {
+	for _, line := range []string{"VARSET +RESULT,1", "VARSET (RESULT),1", "VARSET ((RESULT)),1", "VARSET RESULT:1,1", "VARSET F(1),1", "VARSET UNKNOWN+1,1", "VARSET -SOME_MACRO+1,1"} {
 		r := FormatWithOptions([]byte("@F\n"+line+"\n"), ERB, options)
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("%q diagnostics=%v", line, r.Diagnostics)
@@ -200,13 +159,7 @@ func TestSetterDestinationShapeGuardsKnownExpressions(t *testing.T) {
 
 func TestSetterRejectsReadonlySystemConstants(t *testing.T) {
 	options := Options{Select: []RuleID{CommandSpacing, BinarySpacing, CommaSpacing, DelimiterSpacing}}
-	for _, line := range []string{
-		"VARSET ITEMPRICE,1",
-		"VARSET ITEMPRICE:0,1",
-		"CVARSET ABLNAME:0,1",
-		"POWER GAMEBASE_VERSION,1,2",
-		"VARSET ;!; ITEMPRICE,1",
-	} {
+	for _, line := range []string{"VARSET ITEMPRICE,1", "VARSET ITEMPRICE:0,1", "CVARSET ABLNAME:0,1", "POWER GAMEBASE_VERSION,1,2", "VARSET ;!; ITEMPRICE,1"} {
 		src := []byte("@F\n" + line + "\n")
 		r := FormatWithOptions(src, ERB, options)
 		if !bytes.Equal(r.Output, src) || len(r.Diagnostics) != 1 || r.Diagnostics[0].Severity != Unsupported {
@@ -216,9 +169,9 @@ func TestSetterRejectsReadonlySystemConstants(t *testing.T) {
 	if r := FormatWithOptions([]byte("@F\nVARSET ITEMPRICE:EFA_IDX,1\n"), ERB, options); len(r.Diagnostics) != 0 {
 		t.Fatalf("dynamic readonly index should defer: %+v", r.Diagnostics)
 	}
-	for _, dialect := range []Dialect{CommonDialect, Emuera1824} {
+	for _, dialect := range []erabasic.Dialect{erabasic.CommonDialect, erabasic.Emuera1824} {
 		src := []byte("@F\nVARSET DAYNAME,1\n")
-		r := FormatWithOptions(src, ERB, Options{Dialect: dialect, Select: options.Select})
+		r := FormatWithOptions(src, ERB, Options{Dialect: Dialect(dialect), Select: options.Select})
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("DAYNAME should remain project-defined in dialect %d: %+v", dialect, r.Diagnostics)
 		}

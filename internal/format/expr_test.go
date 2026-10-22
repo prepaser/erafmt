@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+
 	"testing"
 )
 
@@ -48,7 +49,6 @@ func TestFormatExpressionQualifiedVariablesAndConditionalForm(t *testing.T) {
 	if string(got) != want {
 		t.Fatalf("qualified variable expression = %q, want %q", got, want)
 	}
-
 	input = `A+\@ A+1?left,  raw#right; raw\@+B`
 	want = `A + \@ A + 1 ?left,  raw#right; raw\@ + B`
 	got, err = formatExpression([]byte(input), false)
@@ -61,13 +61,7 @@ func TestFormatExpressionQualifiedVariablesAndConditionalForm(t *testing.T) {
 }
 
 func TestFormatExpressionOpaqueRegions(t *testing.T) {
-	tests := []string{
-		`A+@"FORM + text"`,
-		`A+[[runtime alias]]`,
-		`A+B;!; conditional`,
-		`A+B;#; conditional`,
-		`A+B;^; conditional`,
-	}
+	tests := []string{`A+@"FORM + text"`, `A+[[runtime alias]]`, `A+B;!; conditional`, `A+B;#; conditional`, `A+B;^; conditional`}
 	for _, input := range tests {
 		got, err := formatExpression([]byte(input), false)
 		if err != nil {
@@ -109,13 +103,7 @@ func TestFormatExpressionMandatoryInlineMarker(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
-	}{
-		{`(1+2);!;+(3+4)`, `(1 + 2);!;+ (3 + 4)`},
-		{`;!;  A+B`, `;!;  A + B`},
-		{`A+B  ;!;`, `A + B  ;!;`},
-		{`A+B ;!; + C`, `A + B ;!; + C`},
-		{`A+@"x {  B ;!; C  }"+D`, `A + @"x {  B ;!; C  }" + D`},
-	}
+	}{{`(1+2);!;+(3+4)`, `(1 + 2);!;+ (3 + 4)`}, {`;!;  A+B`, `;!;  A + B`}, {`A+B  ;!;`, `A + B  ;!;`}, {`A+B ;!; + C`, `A + B ;!; + C`}, {`A+@"x {  B ;!; C  }"+D`, `A + @"x {  B ;!; C  }" + D`}}
 	for _, tt := range tests {
 		got, err := formatExpression([]byte(tt.input), false)
 		if err != nil {
@@ -165,13 +153,7 @@ func TestMandatoryMarkerCommentAndTrailingBoundaries(t *testing.T) {
 }
 
 func TestFormatExpressionMandatoryMarkerBoundariesStayOpaque(t *testing.T) {
-	for _, input := range []string{
-		`A+B;!;;!;+C`,
-		`A+B;!;;#;+C`,
-		`A+B;#;;!;+C`,
-		`A+B;!;[[alias]]+C`,
-		"A+\u3000B;!;+C",
-	} {
+	for _, input := range []string{`A+B;!;;!;+C`, `A+B;!;;#;+C`, `A+B;#;;!;+C`, `A+B;!;[[alias]]+C`, "A+\u3000B;!;+C"} {
 		got, err := formatExpression([]byte(input), false)
 		if err != nil {
 			t.Fatalf("formatExpression(%q): %v", input, err)
@@ -182,38 +164,8 @@ func TestFormatExpressionMandatoryMarkerBoundariesStayOpaque(t *testing.T) {
 	}
 }
 
-func TestExpressionExcluded(t *testing.T) {
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{`A+@"form"`, false},
-		{`A+"@form"`, false},
-		{`A+[[alias]]`, true},
-		{`A+"[[alias]]"`, true},
-		{`A+@"form";#; literal`, true},
-		{`A+@"form";^; literal`, false},
-		{"A+\u3000B", true},
-		{`A+"\u3000B"`, false},
-		{`A+B;!;`, false},
-		{`A+";!;"`, false},
-		{`A+B; comment`, false},
-		{`A+\@ X?yes#no\@+B`, false},
-		{`A+\@ X?yes\@+B`, false},
-	}
-	for _, tt := range tests {
-		if got := expressionExcluded([]byte(tt.input)); got != tt.want {
-			t.Errorf("expressionExcluded(%q) = %v, want %v", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestFormatExpressionIdempotentAndTokenPreserving(t *testing.T) {
-	inputs := []string{
-		`- -A + !(B == "x+y")`,
-		`F(0x12p+2,0b101, A[1:3])`,
-		`A ? "left # side" # B`,
-	}
+	inputs := []string{`- -A + !(B == "x+y")`, `F(0x12p+2,0b101, A[1:3])`, `A ? "left # side" # B`}
 	for _, input := range inputs {
 		first, err := formatExpression([]byte(input), false)
 		if err != nil {

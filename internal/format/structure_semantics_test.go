@@ -2,6 +2,7 @@ package format
 
 import (
 	"fmt"
+
 	"testing"
 )
 
@@ -65,10 +66,7 @@ func TestEmptyDataWarnings(t *testing.T) {
 		name  string
 		src   string
 		lines []int
-	}{
-		{name: "data", src: "@F\nPRINTDATA\nENDDATA\n", lines: []int{3}},
-		{name: "list", src: "@F\nPRINTDATA\nDATALIST\nENDLIST\nENDDATA\n", lines: []int{4}},
-	} {
+	}{{name: "data", src: "@F\nPRINTDATA\nENDDATA\n", lines: []int{3}}, {name: "list", src: "@F\nPRINTDATA\nDATALIST\nENDLIST\nENDDATA\n", lines: []int{4}}} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := FormatWithOptions([]byte(tc.src), ERB, Options{Select: []RuleID{InstructionIndent}})
 			if len(r.Diagnostics) != len(tc.lines) {
@@ -81,11 +79,7 @@ func TestEmptyDataWarnings(t *testing.T) {
 			}
 		})
 	}
-	for _, src := range []string{
-		"@F\nPRINTDATA\nDATA 1\nENDDATA\n",
-		"@F\nPRINTDATA\nDATALIST\nDATA 1\nENDLIST\nENDDATA\n",
-		"@F\n[IF X]\nPRINTDATA\nENDDATA\n[ENDIF]\n",
-	} {
+	for _, src := range []string{"@F\nPRINTDATA\nDATA 1\nENDDATA\n", "@F\nPRINTDATA\nDATALIST\nDATA 1\nENDLIST\nENDDATA\n", "@F\n[IF X]\nPRINTDATA\nENDDATA\n[ENDIF]\n"} {
 		r := FormatWithOptions([]byte(src), ERB, Options{Select: []RuleID{InstructionIndent}})
 		if len(r.Diagnostics) != 0 {
 			t.Fatalf("unexpected diagnostics for %q: %+v", src, r.Diagnostics)
