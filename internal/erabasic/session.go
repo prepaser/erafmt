@@ -34,3 +34,11 @@ type DocumentSession struct {
 	StatementOrigins      map[int]SourcePosition
 	Aborted               bool
 }
+
+func (s *DocumentSession) Conditional() bool {
+	return preprocessorHas(s.Pp, "IF")
+}
+
+func (s *DocumentSession) Skipped() bool {
+	return preprocessorHas(s.Pp, "SKIP")
+}

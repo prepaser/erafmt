@@ -39,7 +39,7 @@ func (p *formatter) commandAnalysisContext() *erabasic.SemanticContext {
 }
 
 func (p *formatter) scanContext() *erabasic.ScanContext {
-	return &erabasic.ScanContext{Session: &p.DocumentSession, Structural: p.structuralContext()}
+	return &erabasic.ScanContext{Session: &p.DocumentSession}
 }
 
 func (p *formatter) declarationWordAnalysis(head []byte) erabasic.DeclarationWordAnalysis {
@@ -111,14 +111,6 @@ func (p *formatter) preprocessorContext() *erabasic.PreprocessorContext {
 
 func (p *formatter) analyzePreprocessorDirective(i int, head []byte) {
 	p.preprocessorContext().Directive(i, head)
-}
-
-func (p *formatter) preprocessorConditional() bool {
-	return p.preprocessorContext().Conditional()
-}
-
-func (p *formatter) preprocessorSkipped() bool {
-	return p.preprocessorContext().Skipped()
 }
 
 func (p *formatter) structuralContext() *erabasic.StructuralContext {
@@ -228,7 +220,6 @@ func (p *formatter) statementAnalysis() *erabasic.StatementAnalysis {
 		Preserved:           p.Preserved,
 		State:               &p.State,
 		Semantic:            p.semanticContext(),
-		Structural:          p.structuralContext(),
 	}
 }
 

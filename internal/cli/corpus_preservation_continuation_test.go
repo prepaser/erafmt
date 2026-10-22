@@ -534,6 +534,12 @@ func continuationFormCallBoundaryFingerprint(rows []checkedLine, separator strin
 }
 
 func continuationFormBoundaryFingerprint(rows []checkedLine, separator, kind string, dialect format.Dialect, allowFullwidth bool) []byte {
+	if kind == "graphics" {
+		return continuationGraphicsBoundaryFingerprint(rows, separator, dialect, allowFullwidth)
+	}
+	if kind == "print-v" {
+		return continuationPrintVBoundaryFingerprint(rows, separator, dialect, allowFullwidth)
+	}
 	commandRow := -1
 	for i, row := range rows {
 		if len(trimGrammarSpace(row.body, allowFullwidth)) != 0 {
@@ -545,16 +551,6 @@ func continuationFormBoundaryFingerprint(rows []checkedLine, separator, kind str
 	formState := continuationFormState{}
 	for i, row := range rows {
 		head := trimGrammarSpace(row.body, allowFullwidth)
-		if kind == "print-v" && continuationFormStateInactive(formState) {
-			if fingerprint, ok := continuationPrintVFormRowFingerprint(head, separator, i == commandRow, dialect, allowFullwidth); ok {
-				out = appendPreservedField(out, fingerprint)
-				_, formState = normalizeContinuationFormTextState(head, allowFullwidth, formState)
-				if i+1 < len(rows) {
-					_, formState = normalizeContinuationFormTextState([]byte(separator), allowFullwidth, formState)
-				}
-				continue
-			}
-		}
 		if i == commandRow {
 			word, end := firstWord(head)
 			if end > 0 {
@@ -578,125 +574,203 @@ func continuationFormBoundaryFingerprint(rows []checkedLine, separator, kind str
 	return out
 }
 
-func continuationFormStateInactive(state continuationFormState) bool {
-	return state.delimiter == 0 && state.quote == 0 && len(state.frames) == 0
-}
-
-func continuationPrintVFormRowFingerprint(row []byte, separator string, commandRow bool, dialect format.Dialect, allowFullwidth bool) ([]byte, bool) {
-	start, complete := continuationTopLevelFormStart(row)
-	if start < 0 {
-		return nil, false
-	}
-	if complete && start == 0 {
-		withSeparator := append(append([]byte(nil), trimGrammarSpaceRight(row, allowFullwidth)...), []byte(separator)...)
-		return continuationFingerprintForKind(withSeparator, "print-v", dialect, allowFullwidth), true
-	}
-	prefix := row[:start]
-	var word []byte
-	end := 0
-	if commandRow {
-		word, end = firstWord(prefix)
-	}
-	var prefixFingerprint []byte
+func continuationPrintVBoundaryFingerprint(rows []checkedLine, separator string, dialect format.Dialect, allowFullwidth bool) []byte {
+	logical := continuationLogicalSource(rows, separator)
+	head := trimGrammarSpace(logical, allowFullwidth)
+	word, end := firstWord(head)
 	if end == 0 {
-		if len(prefix) != 0 && prefix[0] == '\'' {
-			prefixFingerprint = printVFingerprintDialect(prefix, allowFullwidth, dialect)
-		} else {
-			var ok bool
-			prefixFingerprint, ok = continuationPrintVExpressionPrefixFingerprint(prefix, dialect, allowFullwidth)
-			if !ok {
-				return nil, false
-			}
-		}
-	} else {
-		tail := prefix[end:]
-		command := strings.ToUpper(string(word))
-		if corpusStatementTailNeedsExact(command, tail, dialect, allowFullwidth) && !commandTailPreservationProof(command, tail, dialect, allowFullwidth) {
-			return nil, false
-		}
-		prefixFingerprint = continuationFingerprintForKind(prefix, "print-v", dialect, allowFullwidth)
+		return continuationFormBoundaryFingerprint(rows, separator, "form", dialect, allowFullwidth)
 	}
-	suffix := append([]byte(nil), row[start:]...)
-	if complete {
-		suffix = trimGrammarSpaceRight(suffix, allowFullwidth)
+	tail := normalizeFullwidthCommandGap(head[end:])
+	if allowFullwidth {
+		tail = normalizeFullwidthPrintVTail(tail)
 	}
-	suffix = append(suffix, []byte(separator)...)
-	normalized, _ := normalizeContinuationFormTextState(suffix, allowFullwidth, continuationFormState{})
-	out := []byte{'P'}
-	out = appendPreservedField(out, prefixFingerprint)
-	out = appendPreservedField(out, normalized)
-	return out, true
+	semantic := joinFingerprint(word, printVFingerprintDialect(tail, allowFullwidth, dialect))
+	out := []byte{'V'}
+	out = appendPreservedField(out, semantic)
+	state := continuationFormState{code: true}
+	for i, row := range rows {
+		var literals, code []byte
+		state = scanContinuationLiterals(row.body, allowFullwidth, state, &literals, &code)
+		out = appendPreservedField(out, literals)
+		out = appendPreservedField(out, code)
+		if i+1 < len(rows) {
+			state = scanContinuationLiterals([]byte(separator), allowFullwidth, state, nil, nil)
+		}
+	}
+	return out
 }
 
-func continuationPrintVExpressionPrefixFingerprint(prefix []byte, dialect format.Dialect, allowFullwidth bool) ([]byte, bool) {
-	embeddedNUL := printVNulEmbeddedIdentifierBody(prefix)
-	if len(prefix) == 0 || bytes.IndexByte(prefix, 0) >= 0 && !embeddedNUL || mandatoryMarkerIndex(prefix) >= 0 || bytes.Contains(prefix, []byte("[[")) {
-		return nil, false
+func continuationGraphicsBoundaryFingerprint(rows []checkedLine, separator string, dialect format.Dialect, allowFullwidth bool) []byte {
+	logical := continuationLogicalSource(rows, separator)
+	head := trimGrammarSpace(logical, allowFullwidth)
+	word, end := firstWord(head)
+	if end == 0 {
+		return continuationFormBoundaryFingerprint(rows, separator, "form", dialect, allowFullwidth)
 	}
-	numericBoundarySafe := corpusNumericIdentifierBoundarySafe(prefix)
-	if printVHasNumericIdentifierBoundary(prefix) && !numericBoundarySafe {
-		return nil, false
+	semantic := graphicsFingerprintMode(strings.ToUpper(string(word)), head[end:], dialect, allowFullwidth)
+	out := []byte{'G'}
+	out = appendPreservedField(out, semantic)
+	state := continuationFormState{code: true}
+	for i, row := range rows {
+		var literals, code []byte
+		state = scanContinuationLiterals(row.body, allowFullwidth, state, &literals, &code)
+		out = appendPreservedField(out, literals)
+		out = appendPreservedField(out, code)
+		if i+1 < len(rows) {
+			state = scanContinuationLiterals([]byte(separator), allowFullwidth, state, nil, nil)
+		}
 	}
-	if printVNumericLiteralNeedsExact(prefix) || corpusExpressionLexicallyIncomplete(prefix) || printVBoundaryPrefixNeedsExact(prefix, dialect) || corpusExpressionHasAdjacentOperands(prefix, dialect) && !numericBoundarySafe || corpusExpressionEndsWithOperator(prefix) || corpusExpressionHasAssignmentOperator(prefix) {
-		return nil, false
-	}
-	if corpusExpressionHasDeferredOperand(prefix, dialect) && !numericBoundarySafe && !embeddedNUL {
-		return nil, false
-	}
-	if numericBoundarySafe || embeddedNUL {
-		return tokenFingerprintDialect(prefix, dialect), true
-	}
-	return printVFingerprintDialect(prefix, allowFullwidth, dialect), true
+	return out
 }
 
-func continuationTopLevelFormStart(row []byte) (int, bool) {
-	first := -1
-	for i := 0; i < len(row); {
-		switch row[i] {
-		case '\\':
-			if i+1 < len(row) {
+func scanContinuationLiterals(src []byte, allowFullwidth bool, state continuationFormState, literals, code *[]byte) continuationFormState {
+	emitLiteral := func(data []byte) {
+		if literals != nil {
+			*literals = append(*literals, data...)
+		}
+	}
+	emitCode := func(data []byte) {
+		if code == nil {
+			return
+		}
+		for _, b := range data {
+			*code = appendPreservedField(*code, []byte{b})
+		}
+	}
+	for i := 0; i < len(src); {
+		inside := state.delimiter != 0
+		inFormText := !inside && len(state.frames) != 0
+		if state.quote != 0 {
+			if src[i] == '\\' && i+1 < len(src) {
+				emitLiteral(src[i : i+2])
 				i += 2
-			} else {
-				i++
-			}
-		case '"':
-			end := printVQuotedEnd(row, i)
-			if end <= i+1 {
-				return -1, false
-			}
-			i = end
-		case '\'':
-			i++
-			for i < len(row) && row[i] != ',' && row[i] != 0 {
-				if row[i] == '\\' && i+1 < len(row) {
-					i += 2
-				} else {
-					i++
-				}
-			}
-		case '@':
-			if i+1 < len(row) && row[i+1] == '"' {
-				end, ok := quotedFormEndComplete(row, i)
-				if !ok {
-					if first < 0 {
-						first = i
-					}
-					return first, false
-				}
-				if first < 0 {
-					first = i
-				}
-				i = end
 				continue
 			}
+			emitLiteral(src[i : i+1])
+			if src[i] == state.quote {
+				emitCode(src[i : i+1])
+				state.quote = 0
+			}
 			i++
-		case '{', '%':
-			return -1, false
-		default:
-			i++
+			continue
 		}
+		if src[i] == '@' && i+1 < len(src) && src[i+1] == '"' && (inside || len(state.frames) == 0) {
+			state.frames = append(state.frames, state.continuationFormFrame)
+			state.continuationFormFrame = continuationFormFrame{}
+			emitLiteral(src[i : i+2])
+			emitCode(src[i : i+2])
+			i += 2
+			continue
+		}
+		if src[i] == '"' && inFormText {
+			state.continuationFormFrame = state.frames[len(state.frames)-1]
+			state.frames = state.frames[:len(state.frames)-1]
+			emitLiteral(src[i : i+1])
+			emitCode(src[i : i+1])
+			i++
+			continue
+		}
+		if src[i] == '"' && (inside || state.code && len(state.frames) == 0) {
+			state.quote = '"'
+			emitLiteral(src[i : i+1])
+			emitCode(src[i : i+1])
+			i++
+			continue
+		}
+		if !inside && !inFormText {
+			switch src[i] {
+			case ';':
+				emitCode(src[i : i+1])
+				if corpusProtectedComment(src[i:]) {
+					emitLiteral(src[i:])
+				}
+				return state
+			case 0:
+				emitCode(src[i : i+1])
+				emitLiteral(src[i:])
+				return state
+			case '\'':
+				emitCode(src[i : i+1])
+				start := i
+				for i < len(src) && src[i] != 0 {
+					if src[i] == '\\' && i+1 < len(src) {
+						i += 2
+						continue
+					}
+					if src[i] == ',' {
+						break
+					}
+					i++
+				}
+				emitLiteral(src[start:i])
+				continue
+			}
+		}
+		if inside && ((state.delimiter == '{' && src[i] == '}') || (state.delimiter == '%' && src[i] == '%') || (state.delimiter == '?' && state.depth == 0 && src[i] == '?')) {
+			emitLiteral(src[i : i+1])
+			emitCode(src[i : i+1])
+			i++
+			state.delimiter = 0
+			continue
+		}
+		if !inside && inFormText && (src[i] == '{' || src[i] == '%') {
+			state.delimiter = src[i]
+			emitLiteral(src[i : i+1])
+			emitCode(src[i : i+1])
+			i++
+			continue
+		}
+		if state.delimiter == '?' {
+			switch src[i] {
+			case '(', '[':
+				state.depth++
+			case ')', ']':
+				if state.depth > 0 {
+					state.depth--
+				}
+			}
+		}
+		if !inside && !inFormText && src[i] == '\\' && i+1 < len(src) && src[i+1] == '@' {
+			state.delimiter, state.depth = '?', 0
+			emitLiteral(src[i : i+2])
+			emitCode(src[i : i+2])
+			i += 2
+			continue
+		}
+		if inside {
+			if size := continuationGrammarSpaceSize(src[i:], allowFullwidth); size != 0 {
+				i += size
+				continue
+			}
+			emitCode(src[i : i+1])
+			i++
+			continue
+		}
+		if inFormText {
+			emitLiteral(src[i : i+1])
+		} else if size := continuationGrammarSpaceSize(src[i:], allowFullwidth); size == 0 {
+			emitCode(src[i : i+1])
+		} else {
+			i += size
+			continue
+		}
+		i++
 	}
-	return first, first >= 0
+	return state
+}
+
+func continuationGrammarSpaceSize(src []byte, allowFullwidth bool) int {
+	if len(src) == 0 {
+		return 0
+	}
+	if src[0] == ' ' || src[0] == '\t' {
+		return 1
+	}
+	if allowFullwidth && bytes.HasPrefix(src, []byte("\u3000")) {
+		return 3
+	}
+	return 0
 }
 
 func normalizeFullwidthCommandTailForBoundary(command string, tail []byte, dialect format.Dialect) []byte {

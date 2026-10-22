@@ -23,6 +23,14 @@ func (p *formatter) emitScanIssue(issue erabasic.ScanIssue) {
 	}
 }
 
+func (p *formatter) emitCommandScanIssue(issue erabasic.ScanIssue) {
+	if issue.Severity == erabasic.ScanIssueResource {
+		p.statementResourceProblem(issue.Line, issue.Offset, issue.Message)
+	} else {
+		p.emitScanIssue(issue)
+	}
+}
+
 func (p *formatter) collectContinuation(first int) (*erabasic.ContinuationInput, bool) {
 	ctx := p.scanContext()
 	ctx.Issue = func(issue erabasic.ScanIssue) {
@@ -46,6 +54,7 @@ func (p *formatter) scanFunction(statement erabasic.ScanStatement) bool {
 	continued := input != nil
 	l := p.Lines[first]
 	ctx := p.scanContext()
+	ctx.Structural = p.structuralContext()
 	p.SyntaxSession = p.newExpressionSession(head)
 	p.SyntaxBase = l.Start + prefix
 	analysis := ctx.FunctionBoundary(first, l.Start+prefix, head, p.SyntaxSession)
@@ -143,7 +152,7 @@ func (p *formatter) scanLabel(statement erabasic.ScanStatement) {
 	}
 }
 
-func (p *formatter) scanCommand(statement erabasic.ScanStatement) (int, bool) {
+func (p *formatter) scanCommand(statement erabasic.ScanStatement, emitIssue func(erabasic.ScanIssue)) (int, bool) {
 	first, last, prefix := statement.First, statement.Last, statement.Prefix
 	head, optional, marked := statement.Head, statement.Optional, statement.Marked
 	input := statement.Continuation
@@ -193,18 +202,23 @@ func (p *formatter) scanCommand(statement erabasic.ScanStatement) (int, bool) {
 		proof = p.proveContinuation(input)
 		facts = erabasic.ScanContinuationFacts{Certain: proof.certain}
 	}
-	emitIssue := func(issue erabasic.ScanIssue) {
-		if continued && issue.Severity == erabasic.ScanIssueWarning {
-			p.continuationWarning(proof, issue.Code, issue.Message)
-		} else if issue.Severity == erabasic.ScanIssueResource {
-			p.statementResourceProblem(issue.Line, issue.Offset, issue.Message)
-		} else {
-			p.emitScanIssue(issue)
+	ctx := p.scanContext()
+	switch command {
+	case "CASE", "SELECTCASE", "REPEAT":
+		ctx.Structural = p.structuralContext()
+	}
+	ctx.Issue = emitIssue
+	if continued {
+		continuation := proof
+		ctx.Issue = func(issue erabasic.ScanIssue) {
+			if issue.Severity == erabasic.ScanIssueWarning {
+				p.continuationWarning(continuation, issue.Code, issue.Message)
+			} else {
+				emitIssue(issue)
+			}
 		}
 	}
-	ctx := p.scanContext()
-	ctx.Issue = emitIssue
-	analysis := ctx.CommandBegin(first, l.Start+prefix, head, optional, marked, continued, facts)
+	analysis := ctx.CommandBegin(first, l.Start+prefix, head, command, wordEnd, optional, marked, continued, facts)
 	if analysis.Early {
 		return last, true
 	}

@@ -64,17 +64,16 @@ func (c *PreprocessorContext) currentPP() []ppFrame {
 }
 
 func (c *PreprocessorContext) Conditional() bool {
-	for _, f := range c.currentPP() {
-		if f.Kind == "IF" {
-			return true
-		}
-	}
-	return false
+	return preprocessorHas(c.currentPP(), "IF")
 }
 
 func (c *PreprocessorContext) Skipped() bool {
-	for _, f := range c.currentPP() {
-		if f.Kind == "SKIP" {
+	return preprocessorHas(c.currentPP(), "SKIP")
+}
+
+func preprocessorHas(frames []ppFrame, kind string) bool {
+	for _, f := range frames {
+		if f.Kind == kind {
 			return true
 		}
 	}

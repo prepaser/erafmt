@@ -282,7 +282,11 @@ func (p *formatter) syntax(i int, head []byte, prefix int) int {
 }
 
 func (p *formatter) syntaxReturnMode(i int, head []byte, base int, command string, wordEnd int) bool {
+	if !erabasic.ReturnCommand(command) || !p.expressionParseEnabled() {
+		return false
+	}
 	analysis := p.statementAnalysis()
+	analysis.Structural = p.structuralContext()
 	result := analysis.ReturnMode(head, base, command, wordEnd)
 	if result.Issue == nil {
 		return false
@@ -293,6 +297,9 @@ func (p *formatter) syntaxReturnMode(i int, head []byte, base int, command strin
 }
 
 func (p *formatter) syntaxForSurplus(i int, command string, start, end int) bool {
+	if !erabasic.ForCommand(command) || !p.expressionParseEnabled() {
+		return false
+	}
 	analysis := p.statementAnalysis().ForSurplus(command, start, end)
 	if !analysis.Handled {
 		return false
@@ -313,6 +320,9 @@ func (p *formatter) syntaxForSurplus(i int, command string, start, end int) bool
 }
 
 func (p *formatter) syntaxScalarSurplus(i int, command string, start, end int) bool {
+	if !erabasic.ScalarSurplusCommand(command) || !p.expressionParseEnabled() {
+		return false
+	}
 	analysis := p.statementAnalysis().ScalarSurplus(command, start, end)
 	if !analysis.Handled {
 		return false

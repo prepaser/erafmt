@@ -141,6 +141,7 @@ func FormatWithOptions(src []byte, kind Kind, options Options) Result {
 }
 
 func (p *formatter) run() {
+	emitIssue := p.emitCommandScanIssue
 	for i := 0; i < len(p.Lines); i++ {
 		if p.Aborted {
 			return
@@ -315,7 +316,7 @@ func (p *formatter) run() {
 			p.structuralProblem(first, "continuation delimiter must occupy its own line")
 			continue
 		}
-		next, ok := p.scanCommand(statement)
+		next, ok := p.scanCommand(statement, emitIssue)
 		if !ok {
 			return
 		}
@@ -435,11 +436,11 @@ func (p *formatter) finishFunction(next int) {
 }
 
 func (p *formatter) conditional() bool {
-	return p.preprocessorConditional()
+	return p.DocumentSession.Conditional()
 }
 
 func (p *formatter) skipped() bool {
-	return p.preprocessorSkipped()
+	return p.DocumentSession.Skipped()
 }
 
 func (p *formatter) directive(i int, head []byte) {

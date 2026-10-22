@@ -117,3 +117,106 @@ func TestContinuationPreservationRejectsContextRowRedistribution(t *testing.T) {
 		t.Fatalf("accepted FORM row redistribution: %q", formRedistributed)
 	}
 }
+
+func TestContinuationPreservationFormArgumentBoundaries(t *testing.T) {
+	cases := []struct {
+		name, source, literal, replacement string
+		allowFullwidth                     bool
+	}{
+		{
+			name:        "graphics form split across rows",
+			source:      "@F\n{\nPRINT_IMG \"image\",@\"name\n{1+2}\"\n}\n",
+			literal:     "name",
+			replacement: "neme",
+		},
+		{
+			name:        "PRINTV form suffix",
+			source:      "@F\n{\nPRINTV @\"value {1+2}\",1+2\n}\n",
+			literal:     "value",
+			replacement: "valuX",
+		},
+		{
+			name:        "PRINTV raw apostrophe field",
+			source:      "@F\n{\nPRINTV @\"value {1+2}\",'raw  text\n}\n",
+			literal:     "raw  text",
+			replacement: "raw text",
+		},
+		{
+			name:        "PRINTV escaped comma raw field",
+			source:      "@F\n{\nPRINTV @\"value {1+2}\",'raw\\,  text\n}\n",
+			literal:     "raw\\,  text",
+			replacement: "raw\\, text",
+		},
+		{
+			name:        "PRINTV form split with suffix",
+			source:      "@F\n{\nPRINTV @\"value\n{1+2}\",1+2\n}\n",
+			literal:     "value",
+			replacement: "valuX",
+		},
+		{
+			name:           "fullwidth graphics form split",
+			source:         "@F\n{\nPRINT_IMG　\"image\",@\"name\n{1+2}\"\n}\n",
+			literal:        "name",
+			replacement:    "neme",
+			allowFullwidth: true,
+		},
+	}
+	for _, separator := range []string{"", ",", " ", "　"} {
+		for _, tc := range cases {
+			if separator == "　" && !tc.allowFullwidth {
+				continue
+			}
+			t.Run(tc.name+"/"+continuationSeparatorName(separator), func(t *testing.T) {
+				options := format.Options{Dialect: format.EMEE, AllowFullwidthSpace: tc.allowFullwidth, ContinuationSeparator: &separator}
+				result := format.FormatWithOptions([]byte(tc.source), format.ERB, options)
+				for _, diagnostic := range result.Diagnostics {
+					if diagnostic.Severity == format.Error {
+						t.Fatalf("diagnostics=%v output=%q", result.Diagnostics, result.Output)
+					}
+				}
+				proof := sourcePreservationOptions{dialect: format.EMEE, allowFullwidthSpace: tc.allowFullwidth, continuationSeparator: &separator}
+				if err := checkSourcePreservedOptions([]byte(tc.source), result.Output, proof); err != nil {
+					t.Fatalf("formatted output rejected: %v\noutput=%q", err, result.Output)
+				}
+				mutated := bytes.Replace(result.Output, []byte(tc.literal), []byte(tc.replacement), 1)
+				if bytes.Equal(mutated, result.Output) {
+					t.Fatalf("literal %q was absent from %q", tc.literal, result.Output)
+				}
+				if err := checkSourcePreservedOptions([]byte(tc.source), mutated, proof); err == nil {
+					t.Fatalf("accepted literal mutation: %q", mutated)
+				}
+			})
+		}
+	}
+	separator := " "
+	proof := sourcePreservationOptions{dialect: format.EMEE, continuationSeparator: &separator}
+	for _, tc := range []struct {
+		name, original, redistributed string
+	}{
+		{
+			name:          "PRINTV expression token",
+			original:      "@F\n{\nPRINTV @\"literal {1+2}\", 1+\n2\n}\n",
+			redistributed: "@F\n{\nPRINTV @\"literal {1+2}\",\n1+ 2\n}\n",
+		},
+		{
+			name:          "graphics expression token",
+			original:      "@F\n{\nPRINT_IMG \"image\", @\"label {1+2}\", 1+\n2\n}\n",
+			redistributed: "@F\n{\nPRINT_IMG \"image\", @\"label {1+2}\",\n1+ 2\n}\n",
+		},
+	} {
+		t.Run("reject-"+tc.name, func(t *testing.T) {
+			result := format.FormatWithOptions([]byte(tc.original), format.ERB, format.Options{Dialect: format.EMEE, ContinuationSeparator: &separator})
+			for _, diagnostic := range result.Diagnostics {
+				if diagnostic.Severity == format.Error {
+					t.Fatalf("original diagnostics=%v output=%q", result.Diagnostics, result.Output)
+				}
+			}
+			if err := checkSourcePreservedOptions([]byte(tc.original), result.Output, proof); err != nil {
+				t.Fatalf("formatted original rejected: %v output=%q", err, result.Output)
+			}
+			if err := checkSourcePreservedOptions([]byte(tc.original), []byte(tc.redistributed), proof); err == nil {
+				t.Fatalf("accepted expression token redistribution: %q", tc.redistributed)
+			}
+		})
+	}
+}

@@ -67,12 +67,7 @@ func (c *ScanContext) report(issue ScanIssue) {
 }
 
 func (c *ScanContext) conditional() bool {
-	for _, frame := range c.Session.Pp {
-		if frame.Kind == "IF" {
-			return true
-		}
-	}
-	return false
+	return c.Session.Conditional()
 }
 
 func (c *ScanContext) CollectContinuation(first int) (*ContinuationInput, bool) {
@@ -187,8 +182,7 @@ func (c *ScanContext) Label(first int) labelScanAnalysis {
 	return labelScanAnalysis{}
 }
 
-func (c *ScanContext) CommandBegin(first, offset int, head []byte, optional, marked, continued bool, facts ScanContinuationFacts) commandScanAnalysis {
-	command, wordEnd := CommandOfWithSpace(head, c.Session.AllowFullwidthSpace)
+func (c *ScanContext) CommandBegin(first, offset int, head []byte, command string, wordEnd int, optional, marked, continued bool, facts ScanContinuationFacts) commandScanAnalysis {
 	result := commandScanAnalysis{Command: command, WordEnd: wordEnd}
 	if command == "" {
 		if end := bytes.Index(head, []byte("　")); end > 0 {

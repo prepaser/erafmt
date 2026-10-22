@@ -2,9 +2,30 @@ package format
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
+
+func BenchmarkStatements(b *testing.B) {
+	for _, tc := range []struct{ name, body string }{
+		{"raw", "PRINTL raw  text  \n"},
+		{"expression", "RETURN 1+2\n"},
+		{"preprocessor", "[IF FEATURE]\nRETURN 1+2\n[ELSE]\nRETURN 3+4\n[ENDIF]\n"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			src := []byte("@F\n" + strings.Repeat(tc.body, 1000))
+			b.SetBytes(int64(len(src)))
+			b.ReportAllocs()
+			for b.Loop() {
+				result := FormatWithOptions(src, ERB, Options{})
+				if len(result.Diagnostics) != 0 || len(result.Output) == 0 {
+					b.Fatalf("diagnostics=%v", result.Diagnostics)
+				}
+			}
+		})
+	}
+}
 
 func TestFormat(t *testing.T) {
 	cases := []struct {

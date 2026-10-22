@@ -28,6 +28,14 @@ func CallUsesForm(command string) bool {
 	return bytes.Contains([]byte(command), []byte("FORM")) || command == "FUNC"
 }
 
+func ReturnCommand(command string) bool {
+	return command == "RETURN" || command == "RETURNFORM" || command == "RETURNF"
+}
+
+func ScalarSurplusCommand(command string) bool {
+	return SimpleIntegerCommand(command) && command != "RETURN" || SimpleStringCommand(command) && command != "RETURNF"
+}
+
 func (a *StatementAnalysis) expressionSession(start, end int) (*ExpressionSession, int) {
 	if a.Semantic != nil {
 		return a.Semantic.ExpressionSessionFor(start, end)
@@ -98,7 +106,7 @@ func (a *StatementAnalysis) OrdinaryExpressionProof(start, end int, caseMode boo
 type returnModeAnalysis struct{ Issue *statementIssue }
 
 func (a *StatementAnalysis) ReturnMode(head []byte, base int, command string, wordEnd int) returnModeAnalysis {
-	if command != "RETURN" && command != "RETURNFORM" && command != "RETURNF" || !a.ExpressionEnabled || a.Optional || a.Conditional || a.Base == 0 || string(head[:wordEnd]) != command || CommandFieldHasMandatoryMarker(head) || CommandFieldHasDeferredMarker(head) {
+	if !ReturnCommand(command) || !a.ExpressionEnabled || a.Optional || a.Conditional || a.Base == 0 || string(head[:wordEnd]) != command || CommandFieldHasMandatoryMarker(head) || CommandFieldHasDeferredMarker(head) {
 		return returnModeAnalysis{}
 	}
 	value := KnownValueUnknown
@@ -150,7 +158,7 @@ func (a *StatementAnalysis) ForSurplus(command string, start, end int) surplusAn
 }
 
 func (a *StatementAnalysis) ScalarSurplus(command string, start, end int) surplusAnalysis {
-	if !a.ExpressionEnabled || !(SimpleIntegerCommand(command) && command != "RETURN" || SimpleStringCommand(command) && command != "RETURNF") || CommandFieldHasDeferredMarker(a.Source[start:end]) || CommandFieldHasMandatoryMarker(a.Source[start:end]) {
+	if !a.ExpressionEnabled || !ScalarSurplusCommand(command) || CommandFieldHasDeferredMarker(a.Source[start:end]) || CommandFieldHasMandatoryMarker(a.Source[start:end]) {
 		return surplusAnalysis{}
 	}
 	parts, surplus := CommandPrefixParts(a.Source, a.split(start, end, ','), 1, 1, a.AllowFullwidthSpace, true)

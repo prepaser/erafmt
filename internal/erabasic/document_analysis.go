@@ -66,21 +66,12 @@ type sourceIssue struct {
 	Message  string
 }
 
-func (s *DocumentSession) conditionalSource() bool {
-	for _, f := range s.Pp {
-		if f.Kind == "IF" {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *DocumentSession) FunctionEndIssues(next int) []sourceIssue {
 	if s.Preserved {
 		return nil
 	}
 	severity := Error
-	if s.Optional || s.conditionalSource() {
+	if s.Optional || s.Conditional() {
 		severity = Unsupported
 	}
 	var issues []sourceIssue

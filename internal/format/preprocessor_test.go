@@ -2,9 +2,20 @@ package format
 
 import (
 	"bytes"
-
 	"testing"
 )
+
+func TestPreprocessorQueriesDoNotAllocate(t *testing.T) {
+	p := formatter{}
+	var conditional, skipped bool
+	allocs := testing.AllocsPerRun(1000, func() {
+		conditional = p.conditional()
+		skipped = p.skipped()
+	})
+	if allocs != 0 || conditional || skipped {
+		t.Fatalf("allocs=%v conditional=%v skipped=%v", allocs, conditional, skipped)
+	}
+}
 
 func TestPreprocessorDirectiveScanningKeepsSuffixAndStateRules(t *testing.T) {
 	cases := []struct {
