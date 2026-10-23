@@ -231,7 +231,7 @@ func (p *SemanticContext) GenericCommandRoleValid(command string, start, end int
 			}
 		case command == "FOR":
 			if n == 0 {
-				variable := p.isVariableArgument(p.Src[left:right])
+				variable := p.isVariableArgument(left, right)
 				if CommandFieldHasMandatoryMarker(p.Src[left:right]) {
 					variable = p.CommandFieldVariableArgument(left, right)
 				}

@@ -2,10 +2,51 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/prepaser/erafmt/internal/format"
 )
+
+func TestGraphicsOracleEmbeddedNULIdentifiers(t *testing.T) {
+	for _, dialect := range []format.Dialect{format.CommonDialect, format.Emuera1824, format.EMEE} {
+		for _, wide := range []bool{false, true} {
+			for _, body := range []string{
+				"PRINT_SPACE A\x00B+1",
+				"PRINT_RECT A\x00B+1,2+3,4+5,6+7",
+				"PRINT_SPACE A\x00B+1\x00ignored  ",
+			} {
+				t.Run(fmt.Sprintf("%s/%d/wide=%t", body[:bytes.IndexByte([]byte(body), ' ')], dialect, wide), func(t *testing.T) {
+					source := []byte("@F\n" + body + "\n")
+					result := format.FormatWithOptions(source, format.ERB, format.Options{Dialect: dialect, AllowFullwidthSpace: wide})
+					if len(result.Diagnostics) != 0 || !bytes.Contains(result.Output, []byte("A\x00B + 1")) {
+						t.Fatalf("diagnostics=%v output=%q", result.Diagnostics, result.Output)
+					}
+					proof := sourcePreservationOptions{dialect: dialect, allowFullwidthSpace: wide}
+					if err := checkSourcePreservedOptions(source, result.Output, proof); err != nil {
+						t.Fatalf("formatted output rejected: %v", err)
+					}
+					for _, change := range []struct{ from, to string }{
+						{"A\x00B", "A\x00C"},
+						{"A\x00B", "AB"},
+						{"+ 1", "+ 2"},
+					} {
+						mutated := bytes.Replace(result.Output, []byte(change.from), []byte(change.to), 1)
+						if err := checkSourcePreservedOptions(source, mutated, proof); err == nil {
+							t.Fatalf("accepted mutation: %q", mutated)
+						}
+					}
+					if bytes.Contains(result.Output, []byte("ignored  ")) {
+						mutated := bytes.Replace(result.Output, []byte("ignored  "), []byte("ignored "), 1)
+						if err := checkSourcePreservedOptions(source, mutated, proof); err == nil {
+							t.Fatalf("accepted NUL suffix mutation: %q", mutated)
+						}
+					}
+				})
+			}
+		}
+	}
+}
 
 func TestGraphicsOracleAcceptsDeferredAndKnownFields(t *testing.T) {
 	for _, test := range []struct {

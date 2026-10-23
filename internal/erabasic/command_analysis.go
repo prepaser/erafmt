@@ -236,23 +236,30 @@ func (p *SemanticContext) InstructionBody(head []byte, wordEnd int) ([]byte, int
 	return InstructionBodyWithSpace(head, wordEnd, p.AllowFullwidthSpace, p.ScanSession(head, 0, len(head)))
 }
 
-func (p *SemanticContext) RegisteredFieldValid(command string, index int, src []byte) bool {
+func (p *SemanticContext) RegisteredFieldValid(command string, index, left, right int) bool {
 	switch command {
 	case "ARRAYREMOVE", "ARRAYSHIFT":
-		return index != 0 || p.VariableArgument(src)
+		return index != 0 || p.VariableArgument(left, right)
 	case "PRINTCPERLINE", "SAVENOS":
-		return p.VariableArgument(src)
+		return p.VariableArgument(left, right)
 	default:
 		return true
 	}
 }
 
-func (p *SemanticContext) VariableArgument(src []byte) bool {
-	src = TrimInput(src, p.AllowFullwidthSpace)
+func (p *SemanticContext) VariableArgument(left, right int) bool {
+	return p.variableArgument(left, right, false)
+}
+
+func (p *SemanticContext) variableArgument(left, right int, builtinTypes bool) bool {
+	left = TrimInputLeft(p.Src, left, right, p.AllowFullwidthSpace)
+	right = TrimInputRight(p.Src, left, right, p.AllowFullwidthSpace)
+	src := p.Src[left:right]
 	if bytes.Contains(src, []byte("[[")) {
 		return true
 	}
-	session := p.ScanSession(src, 0, len(src))
+	session := p.ScanSession(p.Src, left, right)
+	session.BuiltinTypes = builtinTypes
 	tokens, err := session.LexRange(ExpressionSourceOriginal, 0, len(src), 0)
 	return err == nil && variableArgumentShape(tokens)
 }

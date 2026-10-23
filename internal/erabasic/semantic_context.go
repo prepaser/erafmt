@@ -1,7 +1,5 @@
 package erabasic
 
-import "bytes"
-
 type SemanticContext struct {
 	Src                 []byte
 	Dialect             Dialect
@@ -88,14 +86,8 @@ func (p *SemanticContext) resourceUsesAbsoluteSource(src []byte) bool {
 	return len(src) != 0 && len(p.Src) != 0 && &src[0] == &p.Src[0]
 }
 
-func (p *SemanticContext) isVariableArgument(src []byte) bool {
-	src = TrimInput(src, p.AllowFullwidthSpace)
-	if bytes.Contains(src, []byte("[[")) {
-		return true
-	}
-	session := p.newSourceSession(src)
-	tokens, err := session.LexRange(ExpressionSourceOriginal, 0, len(src), 0)
-	return err == nil && variableArgumentShape(tokens)
+func (p *SemanticContext) isVariableArgument(left, right int) bool {
+	return p.variableArgument(left, right, true)
 }
 
 func (p *SemanticContext) VariableLHS(src []byte) (string, bool) {

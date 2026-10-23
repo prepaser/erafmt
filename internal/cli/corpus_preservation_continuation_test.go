@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"strings"
+	"unicode"
 
 	"github.com/prepaser/erafmt/internal/format"
 )
@@ -30,6 +31,11 @@ func continuationFingerprint(rows []checkedLine, separator string, dialect forma
 			boundaryMarker = marker
 		} else {
 			exact = true
+		}
+	}
+	if kind == "graphics" && !exact {
+		if fingerprint, ok := continuationGraphicsVirtualSuffixFingerprint(logical, separator, dialect, allowFullwidth); ok {
+			logicalFingerprint = fingerprint
 		}
 	}
 	protectedRows := make([]bool, len(fingerprintRows))
@@ -143,6 +149,11 @@ func continuationBoundaryFingerprint(rows []checkedLine, separator, kind string,
 	}
 	if boundary := continuationNulBoundary(logical, kind, dialect, allowFullwidth); boundary >= 0 {
 		return continuationBoundaryFingerprintNul(rows, separator, kind, marker, dialect, allowFullwidth, boundary)
+	}
+	if kind == "graphics" {
+		if _, ok := continuationGraphicsVirtualSuffixFingerprint(logical, separator, dialect, allowFullwidth); ok {
+			return continuationGraphicsBoundaryFingerprint(rows, separator, dialect, allowFullwidth)
+		}
 	}
 	if fingerprint, ok := continuationArgumentBoundaryFingerprint(rows, separator, kind, dialect, allowFullwidth); ok {
 		return fingerprint
@@ -609,6 +620,9 @@ func continuationGraphicsBoundaryFingerprint(rows []checkedLine, separator strin
 		return continuationFormBoundaryFingerprint(rows, separator, "form", dialect, allowFullwidth)
 	}
 	semantic := graphicsFingerprintMode(strings.ToUpper(string(word)), head[end:], dialect, allowFullwidth)
+	if fingerprint, ok := continuationGraphicsVirtualSuffixFingerprint(logical, separator, dialect, allowFullwidth); ok {
+		semantic = fingerprint
+	}
 	out := []byte{'G'}
 	out = appendPreservedField(out, semantic)
 	state := continuationFormState{code: true}
@@ -624,7 +638,58 @@ func continuationGraphicsBoundaryFingerprint(rows []checkedLine, separator strin
 	return out
 }
 
+func continuationGraphicsVirtualSuffixFingerprint(logical []byte, separator string, dialect format.Dialect, allowFullwidth bool) ([]byte, bool) {
+	if separator == "" || !bytes.HasSuffix(logical, []byte(separator)) {
+		return nil, false
+	}
+	for _, r := range separator {
+		if unicode.IsSpace(r) || unicode.IsControl(r) || r <= unicode.MaxASCII && !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_') {
+			return nil, false
+		}
+	}
+	head := trimGrammarSpace(logical, allowFullwidth)
+	word, end := firstWord(head)
+	command := strings.ToUpper(string(word))
+	if command != "PRINT_SPACE" && command != "PRINT_RECT" || end > len(head)-len(separator) {
+		return nil, false
+	}
+	tail := head[end:]
+	if corpusStatementNulBoundary(command, tail, dialect, allowFullwidth) >= 0 {
+		return nil, false
+	}
+	full := graphicsFingerprintMode(command, tail, dialect, allowFullwidth)
+	if len(full) == 0 || full[0] != 'R' {
+		return nil, false
+	}
+	physical := tail[:len(tail)-len(separator)]
+	if allowFullwidth {
+		physical = normalizeFullwidthExpressionSpacesDialect(physical, dialect)
+		head = normalizeFullwidthExpressionSpacesDialect(head, dialect)
+		tail = head[end:]
+	}
+	fullParts := splitFingerprintFields(tail, topLevelCommas(tail))
+	if !graphicsNumericUnknownMode(fullParts[len(fullParts)-1], dialect) {
+		return nil, false
+	}
+	parts := splitFingerprintFields(physical, topLevelCommas(physical))
+	if len(parts) != 1 && (command != "PRINT_RECT" || len(parts) != 4) {
+		return nil, false
+	}
+	// The virtual suffix can turn a unit into an unresolved identifier.
+	if !graphicsNumericFieldsMode(parts, dialect == format.EMEE || command == "PRINT_SPACE", dialect) {
+		if !allowFullwidth || !graphicsDeferredShape(command, fullParts, dialect) {
+			return nil, false
+		}
+		// Deferred shapes permit width normalization, not arbitrary spacing edits.
+		return appendPreservedField(appendPreservedField([]byte{'R'}, head), []byte(separator)), true
+	}
+	out := appendPreservedField([]byte{'G'}, joinFingerprint(word, expressionFingerprintDialect(physical, dialect)))
+	out = appendPreservedField(out, tokenFingerprintDialect(head, dialect))
+	return appendPreservedField(out, []byte(separator)), true
+}
+
 func scanContinuationLiterals(src []byte, allowFullwidth bool, state continuationFormState, literals, code *[]byte) continuationFormState {
+	// Terminating NUL tails are split by continuationBoundaryFingerprint.
 	emitLiteral := func(data []byte) {
 		if literals != nil {
 			*literals = append(*literals, data...)
@@ -654,6 +719,24 @@ func scanContinuationLiterals(src []byte, allowFullwidth bool, state continuatio
 			}
 			i++
 			continue
+		}
+		if !inside && src[i] == '\\' && i+1 < len(src) {
+			if src[i+1] == '@' {
+				opening := !state.conditional
+				state.conditional = opening
+				if opening {
+					state.delimiter, state.depth = '?', 0
+				}
+				emitLiteral(src[i : i+2])
+				emitCode(src[i : i+2])
+				i += 2
+				continue
+			}
+			if inFormText {
+				emitLiteral(src[i : i+2])
+				i += 2
+				continue
+			}
 		}
 		if src[i] == '@' && i+1 < len(src) && src[i+1] == '"' && (inside || len(state.frames) == 0) {
 			state.frames = append(state.frames, state.continuationFormFrame)
@@ -685,10 +768,6 @@ func scanContinuationLiterals(src []byte, allowFullwidth bool, state continuatio
 				if corpusProtectedComment(src[i:]) {
 					emitLiteral(src[i:])
 				}
-				return state
-			case 0:
-				emitCode(src[i : i+1])
-				emitLiteral(src[i:])
 				return state
 			case '\'':
 				emitCode(src[i : i+1])
@@ -730,13 +809,6 @@ func scanContinuationLiterals(src []byte, allowFullwidth bool, state continuatio
 					state.depth--
 				}
 			}
-		}
-		if !inside && !inFormText && src[i] == '\\' && i+1 < len(src) && src[i+1] == '@' {
-			state.delimiter, state.depth = '?', 0
-			emitLiteral(src[i : i+2])
-			emitCode(src[i : i+2])
-			i += 2
-			continue
 		}
 		if inside {
 			if size := continuationGrammarSpaceSize(src[i:], allowFullwidth); size != 0 {

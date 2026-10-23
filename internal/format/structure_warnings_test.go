@@ -33,3 +33,25 @@ func TestStructureWarningsDeferUncertainPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestRepeatWarningUsesCountOrigin(t *testing.T) {
+	for _, tc := range []struct {
+		name, source string
+		line, column int
+	}{
+		{"plain", "@F\nREPEAT -1\nREND\n", 2, 8},
+		{"indented", "@F\n    REPEAT -1\nREND\n", 2, 12},
+		{"unicode-prefix", "@F\n; note €\nREPEAT -1\nREND\n", 3, 8},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FormatWithOptions([]byte(tc.source), ERB, Options{})
+			if len(result.Diagnostics) != 1 {
+				t.Fatalf("diagnostics=%+v", result.Diagnostics)
+			}
+			diagnostic := result.Diagnostics[0]
+			if diagnostic.Code != "nonpositive_repeat" || diagnostic.Line != tc.line || diagnostic.Column != tc.column {
+				t.Fatalf("diagnostic=%+v want=%d:%d", diagnostic, tc.line, tc.column)
+			}
+		})
+	}
+}

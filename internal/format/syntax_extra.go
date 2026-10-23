@@ -49,7 +49,7 @@ func (p *formatter) syntaxExtraTimes(i int, head []byte, base, wordEnd int) int 
 	}
 	left, right := erabasic.ExtraFieldBoundsWithSpace(p.Src, parts[0], p.AllowFullwidthSpace)
 	firstMarked := erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right])
-	firstVariable := analysis.VariableArgument(p.Src[left:right])
+	firstVariable := analysis.VariableArgument(left, right)
 	if firstMarked {
 		firstVariable = analysis.CommandFieldVariableArgument(left, right)
 	}
@@ -134,7 +134,7 @@ func (p *formatter) syntaxExtraVariableCommand(i int, head []byte, base, wordEnd
 		return fail(base+start, "command expects at most one variable argument")
 	}
 	left, right := erabasic.ExtraFieldBoundsWithSpace(p.Src, parts[0], p.AllowFullwidthSpace)
-	variable := analysis.VariableArgument(p.Src[left:right])
+	variable := analysis.VariableArgument(left, right)
 	if erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) {
 		variable = analysis.CommandFieldVariableArgument(left, right)
 	}

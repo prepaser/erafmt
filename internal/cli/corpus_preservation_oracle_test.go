@@ -4072,7 +4072,7 @@ func graphicsFingerprintMode(command string, tail []byte, dialect format.Dialect
 	case "PRINT_RECT":
 		valid = (len(parts) == 1 || len(parts) == 4) && graphicsNumericFieldsMode(parts, dialect == format.EMEE, dialect)
 	case "PRINT_SPACE":
-		valid = len(parts) == 1 && graphicsNumericFieldMode(parts[0], dialect == format.EMEE, dialect)
+		valid = len(parts) == 1 && graphicsNumericExpressionFieldMode(parts[0], dialect == format.EMEE, dialect)
 	default:
 		valid = false
 	}
@@ -4215,7 +4215,7 @@ func graphicsDeferredNumericField(src []byte, dialect format.Dialect) bool {
 
 func graphicsNumericFieldsMode(parts [][]byte, allowUnit bool, dialect format.Dialect) bool {
 	for _, part := range parts {
-		if !graphicsNumericFieldMode(part, allowUnit, dialect) {
+		if !graphicsNumericExpressionFieldMode(part, allowUnit, dialect) {
 			return false
 		}
 	}
@@ -4594,16 +4594,20 @@ func graphicsNumericField(src []byte, allowUnit bool) bool {
 }
 
 func graphicsNumericFieldMode(src []byte, allowUnit bool, dialect format.Dialect) bool {
+	if bytes.IndexByte(src, 0) >= 0 && !corpusNulBoundaryExpressionSafe(src, dialect) {
+		return false
+	}
+	return graphicsNumericExpressionFieldMode(src, allowUnit, dialect)
+}
+
+func graphicsNumericExpressionFieldMode(src []byte, allowUnit bool, dialect format.Dialect) bool {
 	src = trimCorpusSpace(src)
 	if len(src) == 0 || bytes.Contains(src, []byte(`[[`)) {
 		return false
 	}
-	if bytes.IndexByte(src, 0) >= 0 {
-		if !corpusNulBoundaryExpressionSafe(src, dialect) {
-			return false
-		}
-		prefix := trimCorpusSpace(src[:bytes.IndexByte(src, 0)])
-		return graphicsNumericFieldMode(prefix, allowUnit, dialect) && len(tokenFingerprintCore(src)) != 0
+	if nul := corpusExpressionNulBoundary(src); nul >= 0 {
+		prefix := trimCorpusSpace(src[:nul])
+		return graphicsNumericExpressionFieldMode(prefix, allowUnit, dialect) && len(tokenFingerprintCore(src)) != 0
 	}
 	if len(src) >= 2 && strings.EqualFold(string(src[len(src)-2:]), "px") {
 		unitStart := len(src) - 2

@@ -38,3 +38,45 @@ func TestContinuationDelimiterResourceKeepsOrigin(t *testing.T) {
 		t.Fatalf("diagnostics=%+v", p.diagnostics)
 	}
 }
+
+func TestVariableArgumentResourceKeepsFieldOrigin(t *testing.T) {
+	field := "A:(" + strings.Repeat("1+", 40000) + "1)"
+	for _, tc := range []struct {
+		name, gap string
+		fullwidth bool
+		indent    string
+		want      int
+	}{
+		{"ascii", " ", false, "", 65543},
+		{"ascii-indent", " ", false, "  ", 65545},
+		{"ascii-gap", "    ", false, "", 65546},
+		{"fullwidth", "　", true, "", 65543},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := []byte("@F\n" + tc.indent + "TIMES" + tc.gap + field + ",1\n")
+			result := FormatWithOptions(input, ERB, Options{AllowFullwidthSpace: tc.fullwidth})
+			assertFieldResourceOrigin(t, result, 2, tc.want)
+		})
+	}
+}
+
+func TestContinuationVariableArgumentResourceKeepsFieldOrigin(t *testing.T) {
+	field := "A:(" + strings.Repeat("1+", 40000) + "1)"
+	logical := "TIMES " + field + ",1"
+	cut := 65539
+	separator := ""
+	input := []byte("@F\n{\n" + logical[:cut] + "\n" + logical[cut:] + "\n}\n")
+	result := FormatWithOptions(input, ERB, Options{ContinuationSeparator: &separator})
+	assertFieldResourceOrigin(t, result, 4, 4)
+}
+
+func assertFieldResourceOrigin(t *testing.T, result Result, line, column int) {
+	t.Helper()
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	diagnostic := result.Diagnostics[0]
+	if diagnostic.Code != "resource_limit" || diagnostic.Line != line || diagnostic.Column != column {
+		t.Fatalf("diagnostic=%+v want=%d:%d", diagnostic, line, column)
+	}
+}

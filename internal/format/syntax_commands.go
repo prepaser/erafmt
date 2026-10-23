@@ -380,7 +380,7 @@ func (p *formatter) syntaxRegisteredNamedFields(i int, head []byte, base, wordEn
 				}
 			}
 		}
-		fieldValid := analysis.RegisteredFieldValid(command, n, p.Src[left:right])
+		fieldValid := analysis.RegisteredFieldValid(command, n, left, right)
 		if n == 0 && erabasic.CommandFieldHasMandatoryMarker(p.Src[left:right]) && (command == "ARRAYSHIFT" || command == "ARRAYREMOVE") {
 			fieldValid = analysis.CommandFieldVariableArgument(left, right)
 			if command == "ARRAYSHIFT" {

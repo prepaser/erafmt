@@ -54,7 +54,7 @@ func (c *StructuralContext) AuditRepeatCount(i int, head []byte, wordEnd, base i
 		return
 	}
 	if value, known := constantIntegerValue(tokens); known && value <= 0 {
-		c.report(i, base+left, "nonpositive_repeat", "REPEAT count is nonpositive; its body is skipped", structuralWarning, false)
+		c.report(i, left, "nonpositive_repeat", "REPEAT count is nonpositive; its body is skipped", structuralWarning, false)
 	}
 }
 
